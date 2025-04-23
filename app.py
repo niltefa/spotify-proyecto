@@ -17,9 +17,14 @@ from reportlab.lib.utils import ImageReader
 from staticmap import StaticMap, Line
 from PIL import Image
 
-st.set_page_config(page_title='🚴 Tu rutilla', page_icon='./favicon.ico', layout='wide', initial_sidebar_state='auto')
+st.set_page_config(
+    page_title='🚴 Tu rutilla',
+    page_icon='./favicon.ico',
+    layout='wide',
+    initial_sidebar_state='auto'
+)
 
-# Configuración APIs
+# Configuración de APIs
 t = st.secrets
 ORS_API_KEY = t.get("OPENROUTESERVICE_KEY")
 OWM_API_KEY = t.get("OPENWEATHERMAP_KEY")
@@ -28,7 +33,10 @@ FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
 ors_client = openrouteservice.Client(key=ORS_API_KEY)
 
 # Inicializar session_state
-for key in ['origin', 'route', 'route3d', 'history', 'history_elev', 'route_generated', 'weather']:
+for key in [
+    'origin', 'route', 'route3d', 'history', 'history_elev',
+    'route_generated', 'weather'
+]:
     if key not in st.session_state:
         if key in ['history', 'history_elev']:
             st.session_state[key] = []
@@ -44,8 +52,11 @@ def get_weather(lat, lon):
     if r.status_code != 200:
         return None
     j = r.json()
-    return {"temp": j["main"]["temp"], "condition": j["weather"][0]["main"], "wind": j["wind"]["speed"]}
-
+    return {
+        "temp": j["main"]["temp"],
+        "condition": j["weather"][0]["main"],
+        "wind": j["wind"]["speed"]
+    }
 
 def get_forecast(lat, lon, hours=3):
     params = {"lat": lat, "lon": lon, "appid": OWM_API_KEY, "units": "metric"}
@@ -53,16 +64,23 @@ def get_forecast(lat, lon, hours=3):
     if r.status_code != 200:
         return None
     data = r.json().get('list', [])[:hours]
-    return [{"time": item['dt_txt'], "temp": item['main']['temp'], "condition": item['weather'][0]['main']} for item in data]
-
+    return [
+        {
+            "time": item['dt_txt'],
+            "temp": item['main']['temp'],
+            "condition": item['weather'][0]['main']
+        }
+        for item in data
+    ]
 
 def compute_circular_route(origin, distance_m):
     lat0, lon0 = origin
-    # Intentar varias veces si falla
     for attempt in range(5):
         bearing = np.random.uniform(0, 360)
         half_km = distance_m / 2000.0
-        dest = geopy_distance.distance(kilometers=half_km).destination((lat0, lon0), bearing)
+        dest = geopy_distance.distance(
+            kilometers=half_km
+        ).destination((lat0, lon0), bearing)
         coords = [(lon0, lat0), (dest.longitude, dest.latitude)]
         try:
             route = ors_client.directions(
@@ -84,9 +102,7 @@ def compute_circular_route(origin, distance_m):
             }
         except ApiError:
             continue
-    # Si falla tras varios intentos
     raise ApiError("No se pudo generar ruta tras varios intentos.")
-
 
 def predict_difficulty(distance_m, ascent_m, weather):
     km = distance_m / 1000.0
@@ -108,14 +124,15 @@ def predict_difficulty(distance_m, ascent_m, weather):
     else:
         return "Extremo"
 
-
 def generate_google_maps_url(coords):
     N = len(coords)
     max_pts = 25
-    pts = coords if N <= max_pts else [coords[i] for i in np.linspace(0, N-1, max_pts, dtype=int)]
+    pts = coords if N <= max_pts else [
+        coords[i]
+        for i in np.linspace(0, N-1, max_pts, dtype=int)
+    ]
     path = "/".join(f"{lat},{lon}" for lat, lon in pts)
     return f"https://www.google.com/maps/dir/{path}"
-
 
 # ——— UI ———
 st.title("🚴 Recomienda tu ruta de ciclismo con perfil de elevación, desnivel, Google Maps...")
@@ -126,13 +143,19 @@ center = (40.4168, -3.7038)
 m = folium.Map(location=center, zoom_start=12)
 LocateControl(auto_start=True).add_to(m)
 m.add_child(folium.LatLngPopup())
-dynamic_height = 200 if st.session_state.origin is None else 300
-map_data = st_folium(m, width=700, height=dynamic_height)
+
+# Altura fija pequeña para no dejar espacio en blanco
+map_data = st_folium(m, width=700, height=300)
+
 if map_data and map_data.get("last_clicked"):
-    st.session_state.origin = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
+    st.session_state.origin = (
+        map_data['last_clicked']['lat'],
+        map_data['last_clicked']['lng']
+    )
 elif not st.session_state.origin:
     st.info("Haz click en el mapa para definir el origen.")
     st.stop()
+
 lat, lon = st.session_state.origin
 st.write(f"📍 Origen: ({lat:.6f}, {lon:.6f})")
 
@@ -166,7 +189,10 @@ if st.button("4. Generar ruta"):
         st.session_state.route3d = res['coords3d']
         dist = res['distance']; dur = res['duration']
         elevs = [pt[2] for pt in st.session_state.route3d]
-        ascent = sum(max(elevs[i] - elevs[i-1], 0) for i in range(1, len(elevs)))
+        ascent = sum(
+            max(elevs[i] - elevs[i-1], 0)
+            for i in range(1, len(elevs))
+        )
         st.session_state.history.append((dist, dur))
         st.session_state.history_elev.append(ascent)
         st.session_state.route_generated = True
@@ -182,28 +208,38 @@ if st.session_state.route_generated:
     st.write(f"• Desnivel total (ascenso): {ascent:.0f} m")
     dif = predict_difficulty(dist, ascent, st.session_state.weather)
     st.write(f"• Dificultad estimada: **{dif}**")
-    st.markdown(f"[Ver ruta en Google Maps]({generate_google_maps_url(st.session_state.route)})", unsafe_allow_html=True)
+    st.markdown(
+        f"[Ver ruta en Google Maps]({generate_google_maps_url(st.session_state.route)})",
+        unsafe_allow_html=True
+    )
     
-    # Construir perfil de elevación
+    # Perfil de elevación
     coords3d = st.session_state.route3d
     dist_acc = [0.0]
     for i in range(1, len(coords3d)):
         p0, p1 = coords3d[i-1], coords3d[i]
         seg = geopy_distance.distance((p0[0], p0[1]), (p1[0], p1[1]))
         dist_acc.append(dist_acc[-1] + seg.km * 1000)
-    df_prof = pd.DataFrame({"distance_m": dist_acc, "elevation_m": [pt[2] for pt in coords3d]})
-    fig = px.line(df_prof, x="distance_m", y="elevation_m", labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"}, title="Perfil de Elevación")
+    df_prof = pd.DataFrame({
+        "distance_m": dist_acc,
+        "elevation_m": [pt[2] for pt in coords3d]
+    })
+    fig = px.line(
+        df_prof,
+        x="distance_m",
+        y="elevation_m",
+        labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"},
+        title="Perfil de Elevación"
+    )
     st.plotly_chart(fig, use_container_width=True)
 
-
-
+    # Mapa de ruta estático sobre Folium
     st.subheader("🗺️ Mapa de ruta")
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
     st_folium(m2, width=700, height=300, returned_objects=[])
 
-
-    # Generar PNG de mapa estático con StaticMap
+    # Generar PDF
     m_static = StaticMap(700, 300)
     m_static.add_line(Line([(lon, lat) for lat, lon in st.session_state.route], 'blue', 4))
     img_static = m_static.render()
@@ -211,7 +247,6 @@ if st.session_state.route_generated:
     img_static.save(buf, format='PNG')
     map_png = buf.getvalue()
 
-    # Crear PDF
     pdf_buf = io.BytesIO()
     c = canvas.Canvas(pdf_buf, pagesize=letter)
     w_pt, h_pt = letter
@@ -229,4 +264,9 @@ if st.session_state.route_generated:
     c.showPage()
     c.save()
     pdf_buf.seek(0)
-    st.download_button("📄 Descargar PDF con la ruta (beta)", data=pdf_buf.read(), file_name="ruta_ciclismo.pdf", mime="application/pdf")
+    st.download_button(
+        "📄 Descargar PDF con la ruta (beta)",
+        data=pdf_buf.read(),
+        file_name="ruta_ciclismo.pdf",
+        mime="application/pdf"
+    )
