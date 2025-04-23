@@ -42,9 +42,9 @@ def get_forecast(lat, lon, hours=3):
 
 def compute_circular_route(origin, distance_m):
     lat0, lon0 = origin
-    # Punto destino al azar a mitad de ruta
+    # Punto destino a mitad de ruta
     bearing = np.random.uniform(0, 360)
-    half_km = distance_m / 2000  # km
+    half_km = distance_m / 2000
     dest = geopy_distance.distance(kilometers=half_km).destination((lat0, lon0), bearing)
     lat1, lon1 = dest.latitude, dest.longitude
     coords = [(lon0, lat0), (lon1, lat1)]
@@ -57,8 +57,7 @@ def compute_circular_route(origin, distance_m):
     )
     feat = route['features'][0]
     summary = feat['properties']['summary']
-    geom = feat['geometry']['coordinates']  # [lon, lat, ele]
-    # Construir listas 2D y 3D
+    geom = feat['geometry']['coordinates']
     coords2d = [(pt[1], pt[0]) for pt in geom]
     coords3d = [(pt[1], pt[0], pt[2]) for pt in geom]
     return {
@@ -121,25 +120,25 @@ if st.button("4. Generar Ruta"):
         pred = coeffs[0] * distance + coeffs[1]
         st.write(f"• Predicción personalizada: {pred/60:.1f} min")
     # Gráfico de perfil de elevación
-    elevs = [pt[2] for pt in st.session_state.route3d]
-    # Distancias acumuladas
-dists = [0.0]
-for i in range(1, len(st.session_state.route3d)):
-    prev = st.session_state.route3d[i-1]
-    curr = st.session_state.route3d[i]
-    seg = geopy_distance.distance((prev[0], prev[1]), (curr[0], curr[1])).km * 1000
-    dists.append(dists[-1] + seg)
-df_prof = pd.DataFrame({"distance_m": dists, "elevation_m": elevs})
-fig = px.line(
-    df_prof,
-    x="distance_m",
-    y="elevation_m",
-    labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"},
-    title="Perfil de Elevación"
-)
-st.plotly_chart(fig, use_container_width=True)
-# Mostrar mapa de ruta
-m2 = folium.Map(location=[lat, lon], zoom_start=13)
-folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
-st.subheader("🗺️ Mapa de ruta")
-st_folium(m2, width=700, height=400)
+    if st.session_state.route3d:
+        elevs = [pt[2] for pt in st.session_state.route3d]
+        dists = [0.0]
+        for i in range(1, len(st.session_state.route3d)):
+            prev = st.session_state.route3d[i-1]
+            curr = st.session_state.route3d[i]
+            seg = geopy_distance.distance((prev[0], prev[1]), (curr[0], curr[1])).km * 1000
+            dists.append(dists[-1] + seg)
+        df_prof = pd.DataFrame({"distance_m": dists, "elevation_m": elevs})
+        fig = px.line(
+            df_prof,
+            x="distance_m",
+            y="elevation_m",
+            labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"},
+            title="Perfil de Elevación"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    # Mostrar mapa de ruta
+    m2 = folium.Map(location=[lat, lon], zoom_start=13)
+    folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
+    st.subheader("🗺️ Mapa de ruta")
+    st_folium(m2, width=700, height=400)
