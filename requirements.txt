@@ -4,3 +4,4 @@ networkx
 requests
 numpy
 streamlit-leaflet
+folium

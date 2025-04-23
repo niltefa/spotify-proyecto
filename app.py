@@ -4,7 +4,8 @@ import osmnx as ox
 import networkx as nx
 import requests
 import numpy as np
-from streamlit_leaflet import st_leaflet  # componente de Leaflet para Streamlit
+import folium
+from streamlit_folium import st_folium
 
 # Configuración API Clima
 OWM_API_KEY = st.secrets.get("OPENWEATHERMAP_KEY")
@@ -44,28 +45,19 @@ def get_weather(lat, lon):
     return {"temp": j["main"]["temp"], "condition": j.get("weather")[0]["main"], "wind": j["wind"]["speed"]}
 
 # ——— INTERFAZ STREAMLIT ———
-st.set_page_config(page_title="🚴 Ruta de Ciclismo con Leaflet", layout="wide")
+st.set_page_config(page_title="🚴 Ruta de Ciclismo con Folium", layout="wide")
 st.title("🚴 Recomienda tu Ruta de Ciclismo")
 
-# Mapa Leaflet para seleccionar inicio
+# Mapa de Folium para seleccionar inicio
 st.subheader("Selecciona el punto de inicio (click en el mapa)")
-# Configuración inicial de Leaflet
-leaflet_map = {
-    "center": [40.4168, -3.7038],
-    "zoom": 12,
-    "layers": [
-        {"type": "tile", "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", "attribution": "&copy; OpenStreetMap contributors"}
-    ]
-}
-# Eventos: click
-events = ["click"]
-map_events = st_leaflet(leaflet_map, events=events, height=500)
+center = (40.4168, -3.7038)
+m = folium.Map(location=center, zoom_start=12)
+m.add_child(folium.LatLngPopup())
+map_data = st_folium(m, width=700, height=500)
 
-# Obtener última posición click
-if map_events and "click" in map_events:
-    ev = map_events["click"]
-    lat = ev["latlng"]["lat"]
-    lon = ev["latlng"]["lng"]
+if map_data and map_data.get("last_clicked"):
+    lat = map_data["last_clicked"]["lat"]
+    lon = map_data["last_clicked"]["lng"]
     st.write(f"📍 Punto seleccionado: ({lat:.6f}, {lon:.6f})")
 else:
     st.info("Haz click en el mapa para elegir el punto de inicio.")
@@ -93,16 +85,8 @@ if st.button("Generar Ruta"):
         if not route_nodes:
             st.error("No se pudo generar ruta.")
         else:
-            # Preparar coords
             coords = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in route_nodes]
-            # Crear mapa de ruta
-            route_map = {
-                "center": [lat, lon],
-                "zoom": 13,
-                "layers": [
-                    {"type": "tile", "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"},
-                    {"type": "polyline", "latlngs": coords, "color": "blue", "weight": 4}
-                ]
-            }
+            m2 = folium.Map(location=[lat, lon], zoom_start=13)
+            folium.PolyLine(coords, color='blue', weight=4).add_to(m2)
             st.subheader("🗺️ Ruta generada")
-            st_leaflet(route_map, height=500)
+            st_folium(m2, width=700, height=500)
