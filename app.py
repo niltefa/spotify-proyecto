@@ -115,7 +115,7 @@ lat, lon = st.session_state.origin
 st.write(f"📍 Origen: ({lat:.6f}, {lon:.6f})")
 
 # 2. Selección de distancia
-d_km = st.slider("2. Distancia deseada (km)", 5, 50, 20)
+d_km = st.slider("2. Distancia deseada (km)", 5, 250, 20)
 distance = d_km * 1000
 
 # 3. Clima y pronóstico
