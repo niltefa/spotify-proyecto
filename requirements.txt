@@ -5,4 +5,4 @@ requests
 folium
 streamlit-folium
 numpy
-streamlit-leaflet
+streamlit_leaflet
