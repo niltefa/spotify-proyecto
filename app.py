@@ -178,4 +178,4 @@ if st.session_state.route_generated:
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
     st.subheader("🗺️ Mapa de ruta")
-    st_folium(m2, width=700, height=400)
+    st_folium(m2, width=700, height=400, returned_objects=[])
