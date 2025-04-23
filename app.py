@@ -227,4 +227,4 @@ if st.session_state.route_generated:
     c.showPage()
     c.save()
     pdf_buf.seek(0)
-    st.download_button("📄 Descargar PDF con la ruta", data=pdf_buf.read(), file_name="ruta_ciclismo.pdf", mime="application/pdf")
+    st.download_button("📄 Descargar PDF con la ruta (beta)", data=pdf_buf.read(), file_name="ruta_ciclismo.pdf", mime="application/pdf")
