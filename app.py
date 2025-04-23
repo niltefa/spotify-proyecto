@@ -72,7 +72,7 @@ def get_acousticbrainz_features(track_id: str) -> dict:
 
     if not isrc:
         return {}
-
+    print(f"ISRC: {isrc}")
     # 2. Consultar MusicBrainz
     mb_url = f"https://musicbrainz.org/ws/2/recording"
     mb_params = {"query": f"isrc:{isrc}", "fmt": "json"}
