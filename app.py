@@ -9,11 +9,11 @@ import plotly.express as px
 from streamlit_folium import st_folium
 from geopy import distance as geopy_distance
 import openrouteservice
+from openrouteservice.exceptions import ApiError
 from folium.plugins import LocateControl
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.utils import ImageReader
-# Importar StaticMap para generar mapa estático sin depender de servicios externos
 from staticmap import StaticMap, Line
 from PIL import Image
 
@@ -56,28 +56,34 @@ def get_forecast(lat, lon, hours=3):
 
 def compute_circular_route(origin, distance_m):
     lat0, lon0 = origin
-    bearing = np.random.uniform(0, 360)
-    half_km = distance_m / 2000.0
-    dest = geopy_distance.distance(kilometers=half_km).destination((lat0, lon0), bearing)
-    lat1, lon1 = dest.latitude, dest.longitude
-    coords = [(lon0, lat0), (lon1, lat1)]
-    route = ors_client.directions(
-        coords,
-        profile='cycling-regular',
-        format_out='geojson',
-        elevation=True
-    )
-    feat = route['features'][0]
-    summary = feat['properties']['summary']
-    geom = feat['geometry']['coordinates']
-    coords2d = [(pt[1], pt[0]) for pt in geom]
-    coords3d = [(pt[1], pt[0], pt[2]) for pt in geom]
-    return {
-        "coords": coords2d + list(reversed(coords2d)),
-        "coords3d": coords3d + list(reversed(coords3d)),
-        "distance": summary['distance'],
-        "duration": summary['duration']
-    }
+    # Intentar varias veces si falla
+    for attempt in range(5):
+        bearing = np.random.uniform(0, 360)
+        half_km = distance_m / 2000.0
+        dest = geopy_distance.distance(kilometers=half_km).destination((lat0, lon0), bearing)
+        coords = [(lon0, lat0), (dest.longitude, dest.latitude)]
+        try:
+            route = ors_client.directions(
+                coords,
+                profile='cycling-regular',
+                format_out='geojson',
+                elevation=True
+            )
+            feat = route['features'][0]
+            summary = feat['properties']['summary']
+            geom = feat['geometry']['coordinates']
+            coords2d = [(pt[1], pt[0]) for pt in geom]
+            coords3d = [(pt[1], pt[0], pt[2]) for pt in geom]
+            return {
+                "coords": coords2d + list(reversed(coords2d)),
+                "coords3d": coords3d + list(reversed(coords3d)),
+                "distance": summary['distance'],
+                "duration": summary['duration']
+            }
+        except ApiError:
+            continue
+    # Si falla tras varios intentos
+    raise ApiError("No se pudo generar ruta tras varios intentos.")
 
 
 def predict_difficulty(distance_m, ascent_m, weather):
@@ -104,11 +110,7 @@ def predict_difficulty(distance_m, ascent_m, weather):
 def generate_google_maps_url(coords):
     N = len(coords)
     max_pts = 25
-    if N <= max_pts:
-        pts = coords
-    else:
-        indices = np.linspace(0, N-1, max_pts, dtype=int)
-        pts = [coords[i] for i in indices]
+    pts = coords if N <= max_pts else [coords[i] for i in np.linspace(0, N-1, max_pts, dtype=int)]
     path = "/".join(f"{lat},{lon}" for lat, lon in pts)
     return f"https://www.google.com/maps/dir/{path}"
 
@@ -152,17 +154,22 @@ else:
 
 # 4. Generar ruta
 if st.button("4. Generar Ruta"):
-    res = compute_circular_route((lat, lon), distance)
-    st.session_state.route = res['coords']
-    st.session_state.route3d = res['coords3d']
-    dist = res['distance']; dur = res['duration']
-    elevs = [pt[2] for pt in st.session_state.route3d]
-    ascent = sum(max(elevs[i] - elevs[i-1], 0) for i in range(1, len(elevs)))
-    st.session_state.history.append((dist, dur))
-    st.session_state.history_elev.append(ascent)
-    st.session_state.route_generated = True
+    try:
+        res = compute_circular_route((lat, lon), distance)
+    except ApiError as e:
+        st.error(f"Error al generar la ruta: {e}")
+        st.session_state.route_generated = False
+    else:
+        st.session_state.route = res['coords']
+        st.session_state.route3d = res['coords3d']
+        dist = res['distance']; dur = res['duration']
+        elevs = [pt[2] for pt in st.session_state.route3d]
+        ascent = sum(max(elevs[i] - elevs[i-1], 0) for i in range(1, len(elevs)))
+        st.session_state.history.append((dist, dur))
+        st.session_state.history_elev.append(ascent)
+        st.session_state.route_generated = True
 
-# 5. Mostrar resultados
+# 5. Mostrar resultados y generar PDF solo si route_generated es True
 if st.session_state.route_generated:
     dist = st.session_state.history[-1][0]
     dur = st.session_state.history[-1][1]
@@ -173,77 +180,43 @@ if st.session_state.route_generated:
     st.write(f"• Desnivel total (ascenso): {ascent:.0f} m")
     dif = predict_difficulty(dist, ascent, st.session_state.weather)
     st.write(f"• Dificultad estimada: **{dif}**")
-    url = generate_google_maps_url(st.session_state.route)
-    st.markdown(f"[Ver ruta en Google Maps]({url})", unsafe_allow_html=True)
-
-    if len(st.session_state.history) > 1:
-        arr = np.array(st.session_state.history)
-        coeffs_time = np.polyfit(arr[:,0], arr[:,1], 1)
-        pred_time = coeffs_time[0] * distance + coeffs_time[1]
-        st.write(f"• Predicción tiempo personalizada: {pred_time/60:.1f} min")
-    if len(st.session_state.history_elev) > 1:
-        dists = [h[0] for h in st.session_state.history]
-        coeffs_elev = np.polyfit(dists, st.session_state.history_elev, 1)
-        pred_elev = coeffs_elev[0] * distance + coeffs_elev[1]
-        st.write(f"• Predicción desnivel personalizada: {pred_elev:.0f} m")
-
-    # Perfil de elevación gráfico
+    st.markdown(f"[Ver ruta en Google Maps]({generate_google_maps_url(st.session_state.route)})", unsafe_allow_html=True)
+    
+    # Construir perfil de elevación
     coords3d = st.session_state.route3d
     dist_acc = [0.0]
     for i in range(1, len(coords3d)):
         p0, p1 = coords3d[i-1], coords3d[i]
-        seg = geopy_distance.distance((p0[0], p0[1]), (p1[0], p1[1])).km * 1000
-        dist_acc.append(dist_acc[-1] + seg)
+        seg = geopy_distance.distance((p0[0], p0[1]), (p1[0], p1[1]))
+        dist_acc.append(dist_acc[-1] + seg.km * 1000)
     df_prof = pd.DataFrame({"distance_m": dist_acc, "elevation_m": [pt[2] for pt in coords3d]})
-    fig = px.line(df_prof, x="distance_m", y="elevation_m",
-                  labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"},
-                  title="Perfil de Elevación")
+    fig = px.line(df_prof, x="distance_m", y="elevation_m", labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"}, title="Perfil de Elevación")
     st.plotly_chart(fig, use_container_width=True)
 
-    # Generar PNG de mapa estático localmente con StaticMap
-    # Crear objeto StaticMap
+    # Generar PNG de mapa estático con StaticMap
     m_static = StaticMap(700, 300)
-    # Añadir la línea de la ruta (lon, lat)
-    line_coords = [(lon, lat) for lat, lon in st.session_state.route]
-    m_static.add_line(Line(line_coords, 'blue', 4))
-    # Renderizar imagen
-    image = m_static.render()
+    m_static.add_line(Line([(lon, lat) for lat, lon in st.session_state.route], 'blue', 4))
+    img_static = m_static.render()
     buf = io.BytesIO()
-    image.save(buf, format='PNG')
+    img_static.save(buf, format='PNG')
     map_png = buf.getvalue()
 
-    if map_png:
-        # Generación del PDF
-        pdf_buffer = io.BytesIO()
-        c = canvas.Canvas(pdf_buffer, pagesize=letter)
-        w_pt, h_pt = letter
-
-        c.setFont("Helvetica-Bold", 18)
-        c.drawCentredString(w_pt/2, h_pt - 50, "🛣 Detalle de la Ruta de Ciclismo")
-        img = ImageReader(io.BytesIO(map_png))
-        c.drawImage(img, 50, h_pt - 100 - 300, width=500, height=300)
-
-        y0 = h_pt - 420
-        c.setFont("Helvetica", 12)
-        c.drawString(50, y0,    f"• Distancia: {dist/1000:.2f} km")
-        c.drawString(50, y0-20, f"• Duración: {dur/60:.1f} min")
-        c.drawString(50, y0-40, f"• Desnivel: {ascent:.0f} m")
-        c.drawString(50, y0-60, f"• Dificultad: {dif}")
-
-        prof_png = fig.to_image(format="png")
-        prof_img = ImageReader(io.BytesIO(prof_png))
-        c.drawImage(prof_img, 50, y0 - 360, width=500, height=250)
-
-        c.showPage()
-        c.save()
-        pdf_buffer.seek(0)
-        pdf_bytes = pdf_buffer.read()
-
-        st.download_button(
-            label="📄 Descargar PDF con la ruta",
-            data=pdf_bytes,
-            file_name="ruta_ciclismo.pdf",
-            mime="application/pdf"
-        )
-    else:
-        st.error("No se pudo generar el mapa estático para el PDF.")
+    # Crear PDF
+    pdf_buf = io.BytesIO()
+    c = canvas.Canvas(pdf_buf, pagesize=letter)
+    w_pt, h_pt = letter
+    c.setFont("Helvetica-Bold", 18)
+    c.drawCentredString(w_pt/2, h_pt - 50, "🛣 Detalle de la Ruta de Ciclismo")
+    c.drawImage(ImageReader(io.BytesIO(map_png)), 50, h_pt - 400, width=500, height=300)
+    y0 = h_pt - 420
+    c.setFont("Helvetica", 12)
+    c.drawString(50, y0, f"• Distancia: {dist/1000:.2f} km")
+    c.drawString(50, y0-20, f"• Duración: {dur/60:.1f} min")
+    c.drawString(50, y0-40, f"• Desnivel: {ascent:.0f} m")
+    c.drawString(50, y0-60, f"• Dificultad: {dif}")
+    prof_png = fig.to_image(format="png")
+    c.drawImage(ImageReader(io.BytesIO(prof_png)), 50, y0-380, width=500, height=250)
+    c.showPage()
+    c.save()
+    pdf_buf.seek(0)
+    st.download_button("📄 Descargar PDF con la ruta", data=pdf_buf.read(), file_name="ruta_ciclismo.pdf", mime="application/pdf")
