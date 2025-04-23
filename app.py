@@ -18,7 +18,7 @@ from staticmap import StaticMap, Line
 from PIL import Image
 
 st.set_page_config(
-    page_title='Tu rutilla',
+    page_title='🚴 Tu rutilla',
     page_icon='./favicon.ico',
     layout='wide',
     initial_sidebar_state='auto'
@@ -158,13 +158,13 @@ if st.session_state.origin is None:
         st.info("Haz click en el mapa para definir el origen.")
         st.stop()
 
-# Ya definido el origen
 lat, lon = st.session_state.origin
 st.write(f"📍 Origen: ({lat:.6f}, {lon:.6f})")
 
 # 2. Selección de distancia
 d_km = st.slider("2. Distancia deseada (km)", 5, 250, 20)
-distance = d_km * 1000
+# Ahora pasamos la mitad al generador para que el total quede cerca de lo elegido
+distance = d_km * 1000 / 2
 
 # 3. Clima y pronóstico
 st.subheader("3. Clima en origen")
