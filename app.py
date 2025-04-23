@@ -17,11 +17,16 @@ FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
 ors_client = openrouteservice.Client(key=ORS_API_KEY)
 
 # Inicializar session_state
-for key in ['origin', 'route', 'route3d', 'history', 'route_generated']:
+for key in ['origin', 'route', 'route3d', 'history', 'history_elev', 'route_generated']:
     if key not in st.session_state:
-        # route_generated indica si ya se creó ruta
-        default = False if key == 'route_generated' else (None if key != 'history' else [])
-        st.session_state[key] = default
+        if key == 'history':
+            st.session_state[key] = []
+        elif key == 'history_elev':
+            st.session_state[key] = []
+        elif key == 'route_generated':
+            st.session_state[key] = False
+        else:
+            st.session_state[key] = None
 
 # ——— Funciones ———
 def get_weather(lat, lon):
@@ -42,11 +47,13 @@ def get_forecast(lat, lon, hours=3):
 
 def compute_circular_route(origin, distance_m):
     lat0, lon0 = origin
+    # Punto destino a mitad de ruta
     bearing = np.random.uniform(0, 360)
     half_km = distance_m / 2000
     dest = geopy_distance.distance(kilometers=half_km).destination((lat0, lon0), bearing)
     lat1, lon1 = dest.latitude, dest.longitude
     coords = [(lon0, lat0), (lon1, lat1)]
+    # Solicitar ruta con elevación
     route = ors_client.directions(
         coords,
         profile='cycling-regular',
@@ -55,7 +62,8 @@ def compute_circular_route(origin, distance_m):
     )
     feat = route['features'][0]
     summary = feat['properties']['summary']
-    geom = feat['geometry']['coordinates']
+    geom = feat['geometry']['coordinates']  # [lon, lat, ele]
+    # Construir coordenadas 2D y 3D
     coords2d = [(pt[1], pt[0]) for pt in geom]
     coords3d = [(pt[1], pt[0], pt[2]) for pt in geom]
     return {
@@ -67,7 +75,7 @@ def compute_circular_route(origin, distance_m):
 
 # ——— Interfaz ———
 st.set_page_config(page_title="🚴 Ruta de Ciclismo Avanzada", layout="wide")
-st.title("🚴 Recomienda tu Ruta de Ciclismo con Perfil de Elevación")
+st.title("🚴 Recomienda tu Ruta de Ciclismo con Perfil de Elevación y Desnivel")
 
 # 1. Selección de punto de origen
 st.subheader("1. Selecciona el punto de inicio (click en el mapa)")
@@ -100,43 +108,50 @@ if fcast:
 
 # 4. Botón para generar ruta
 if st.button("4. Generar Ruta"):
-    result = compute_circular_route((lat, lon), distance)
-    st.session_state.route = result['coords']
-    st.session_state.route3d = result['coords3d']
-    st.session_state.history.append((result['distance'], result['duration']))
+    res = compute_circular_route((lat, lon), distance)
+    # Guardar datos de ruta
+    st.session_state.route = res['coords']
+    st.session_state.route3d = res['coords3d']
+    dist = res['distance']; dur = res['duration']
+    # Calcular desnivel (suma de ascensos)
+    elevs = [pt[2] for pt in st.session_state.route3d]
+    ascent = sum(max(elevs[i] - elevs[i-1], 0) for i in range(1, len(elevs)))
+    # Historial
+    st.session_state.history.append((dist, dur))
+    st.session_state.history_elev.append(ascent)
     st.session_state.route_generated = True
 
 # 5. Mostrar resultados si ya se generó ruta
 if st.session_state.route_generated:
     dist = st.session_state.history[-1][0]
     dur = st.session_state.history[-1][1]
+    ascent = st.session_state.history_elev[-1]
     st.subheader("Ruta generada")
     st.write(f"• Distancia (ORS): {dist/1000:.1f} km")
     st.write(f"• Duración estimada (ORS): {dur/60:.1f} min")
-    # Predicción basada en histórico
+    st.write(f"• Desnivel total (ascenso): {ascent:.0f} m")
+    # Predicción basada en histórico de tiempo
     if len(st.session_state.history) > 1:
         arr = np.array(st.session_state.history)
         coeffs = np.polyfit(arr[:,0], arr[:,1], 1)
-        pred = coeffs[0]*distance + coeffs[1]
-        st.write(f"• Predicción personalizada: {pred/60:.1f} min")
+        pred_time = coeffs[0]*distance + coeffs[1]
+        st.write(f"• Predicción personalizada tiempo: {pred_time/60:.1f} min")
+    # Predicción basada en histórico de desnivel
+    if len(st.session_state.history_elev) > 1:
+        dists = [h[0] for h in st.session_state.history]
+        coeffs_e = np.polyfit(dists, st.session_state.history_elev, 1)
+        pred_elev = coeffs_e[0]*distance + coeffs_e[1]
+        st.write(f"• Predicción personalizada desnivel: {pred_elev:.0f} m")
     # Gráfico perfil de elevación
-    if st.session_state.route3d:
-        elevs = [pt[2] for pt in st.session_state.route3d]
-        dists = [0.0]
-        for i in range(1, len(st.session_state.route3d)):
-            prev = st.session_state.route3d[i-1]
-            curr = st.session_state.route3d[i]
-            seg = geopy_distance.distance((prev[0], prev[1]), (curr[0], curr[1])).km * 1000
-            dists.append(dists[-1] + seg)
-        df_prof = pd.DataFrame({"distance_m": dists, "elevation_m": elevs})
-        fig = px.line(
-            df_prof,
-            x="distance_m",
-            y="elevation_m",
-            labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"},
-            title="Perfil de Elevación"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    coords3d = st.session_state.route3d
+    dist_acc = [0.0]
+    for i in range(1, len(coords3d)):
+        p0 = coords3d[i-1]; p1 = coords3d[i]
+        seg = geopy_distance.distance((p0[0], p0[1]), (p1[0], p1[1])).km*1000
+        dist_acc.append(dist_acc[-1] + seg)
+    df_prof = pd.DataFrame({"distance_m": dist_acc, "elevation_m": [pt[2] for pt in coords3d]})
+    fig = px.line(df_prof, x="distance_m", y="elevation_m", labels={"distance_m":"Distancia (m)","elevation_m":"Elevación (m)"}, title="Perfil de Elevación")
+    st.plotly_chart(fig, use_container_width=True)
     # Mapa de ruta
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
