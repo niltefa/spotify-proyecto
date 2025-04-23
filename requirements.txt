@@ -1,10 +1,9 @@
 streamlit
-osmnx[all]
-networkx
 requests
 numpy
-streamlit-leaflet
+pandas
 folium
-streamlit_folium
+streamlit-folium
+plotly
 geopy
 openrouteservice
