@@ -13,6 +13,9 @@ from folium.plugins import LocateControl
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.utils import ImageReader
+# Importar StaticMap para generar mapa estático sin depender de servicios externos
+from staticmap import StaticMap, Line
+from PIL import Image
 
 # Configuración APIs
 t = st.secrets
@@ -197,15 +200,17 @@ if st.session_state.route_generated:
                   title="Perfil de Elevación")
     st.plotly_chart(fig, use_container_width=True)
 
-    # Generar PNG de mapa estático con OSM StaticMap
-    sampled = st.session_state.route
-    if len(sampled) > 100:
-        idx = np.linspace(0, len(sampled)-1, 100, dtype=int)
-        sampled = [sampled[i] for i in idx]
-    path_str = "color:blue|weight:4|" + "|".join(f"{lat},{lon}" for lat, lon in sampled)
-    osm_url = f"https://staticmap.openstreetmap.de/staticmap.php?size=700x300&path={path_str}"
-    resp = requests.get(osm_url)
-    map_png = resp.content if resp.status_code == 200 else None
+    # Generar PNG de mapa estático localmente con StaticMap
+    # Crear objeto StaticMap
+    m_static = StaticMap(700, 300)
+    # Añadir la línea de la ruta (lon, lat)
+    line_coords = [(lon, lat) for lat, lon in st.session_state.route]
+    m_static.add_line(Line(line_coords, 'blue', 4))
+    # Renderizar imagen
+    image = m_static.render()
+    buf = io.BytesIO()
+    image.save(buf, format='PNG')
+    map_png = buf.getvalue()
 
     if map_png:
         # Generación del PDF
@@ -241,4 +246,4 @@ if st.session_state.route_generated:
             mime="application/pdf"
         )
     else:
-        st.error("No se pudo obtener la imagen de la ruta para generar el PDF.")
+        st.error("No se pudo generar el mapa estático para el PDF.")
