@@ -56,6 +56,8 @@ st.success("✅ Autenticado. Cargando historial…")
 # Spotify permite max 50 en recently_played
 items = sp.current_user_recently_played(limit=50)["items"]
 
+print(f"Recuperando {len(items)} canciones...")
+st.success("{items}")
 records = []
 for t in items:
     f = sp.audio_features(t["track"]["id"])[0]
