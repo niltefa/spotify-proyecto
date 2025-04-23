@@ -25,7 +25,7 @@ with st.sidebar:
     st.header("🔐 Autenticación Spotify")
     client_id = st.text_input("Client ID", type="password")
     client_secret = st.text_input("Client Secret", type="password")
-    redirect_uri = st.text_input("Redirect URI", value="http://localhost:8888/callback")
+    redirect_uri = st.text_input("Redirect URI", value="https://tu-musiquilla.streamlit.app/")
     fetch_data = st.button("Cargar historial musical")
 
 if fetch_data and client_id and client_secret:
