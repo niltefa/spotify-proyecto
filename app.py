@@ -24,7 +24,7 @@ TOKEN_URL = "https://accounts.spotify.com/api/token"
 
 # ——— UI ———
 st.title("🎧 Tu Huella Emocional Sonora")
-code = st.query_params().get("code", [None])[0]
+code = st.experimental_get_query_params().get("code", [None])[0]
 
 if not CLIENT_ID or not CLIENT_SECRET:
     st.error("❌ Configura CLIENT_ID y CLIENT_SECRET en Streamlit Secrets.")
