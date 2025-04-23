@@ -18,7 +18,7 @@ from staticmap import StaticMap, Line
 from PIL import Image
 
 st.set_page_config(
-    page_title='🚴 Tu rutilla',
+    page_title='Tu rutilla',
     page_icon='./favicon.ico',
     layout='wide',
     initial_sidebar_state='auto'
@@ -140,21 +140,25 @@ st.title("🚴 Tu rutilla de ciclismo + métricas de rendimiento")
 # 0. Peso del usuario
 weight_kg = st.number_input("¿Cuál es tu peso? (kg)", min_value=40, max_value=150, value=70)
 
-# 1. Selección de origen
-st.subheader("1. Selecciona el punto de inicio (click en el mapa)")
-center = (40.4168, -3.7038)
-m = folium.Map(location=center, zoom_start=12)
-LocateControl(auto_start=True).add_to(m)
-m.add_child(folium.LatLngPopup())
-map_data = st_folium(m, width=700, height=300)
-if map_data and map_data.get("last_clicked"):
-    st.session_state.origin = (
-        map_data['last_clicked']['lat'],
-        map_data['last_clicked']['lng']
-    )
-elif not st.session_state.origin:
-    st.info("Haz click en el mapa para definir el origen.")
-    st.stop()
+# 1. Selección de origen (solo mientras no esté definido)
+if st.session_state.origin is None:
+    st.subheader("1. Selecciona el punto de inicio (click en el mapa)")
+    center = (40.4168, -3.7038)
+    m = folium.Map(location=center, zoom_start=12)
+    LocateControl(auto_start=True).add_to(m)
+    m.add_child(folium.LatLngPopup())
+    map_data = st_folium(m, width=700, height=300)
+
+    if map_data and map_data.get("last_clicked"):
+        st.session_state.origin = (
+            map_data['last_clicked']['lat'],
+            map_data['last_clicked']['lng']
+        )
+    else:
+        st.info("Haz click en el mapa para definir el origen.")
+        st.stop()
+
+# Ya definido el origen
 lat, lon = st.session_state.origin
 st.write(f"📍 Origen: ({lat:.6f}, {lon:.6f})")
 
@@ -208,11 +212,10 @@ if st.session_state.route_generated:
     
     # → Velocidad media
     dur_h = dur / 3600.0
-    avg_speed = (dist/1000.0) / dur_h if dur_h>0 else 0
+    avg_speed = (dist/1000.0) / dur_h if dur_h > 0 else 0
     st.write(f"• Velocidad media: **{avg_speed:.1f} km/h**")
 
     # → Calorías estimadas
-    # MET según velocidad
     if avg_speed < 16:
         MET = 6
     elif avg_speed < 20:
