@@ -104,7 +104,7 @@ m = folium.Map(location=center, zoom_start=12)
 LocateControl(auto_start=True).add_to(m)
 m.add_child(folium.LatLngPopup())
 # Ajuste dinámico de altura: más pequeño antes de seleccionar punto
-dynamic_height = 300 if st.session_state.origin is None else 400
+dynamic_height = 500 if st.session_state.origin is None else 600
 map_data = st_folium(m, width=1000, height=dynamic_height)
 if map_data and map_data.get("last_clicked"):
     st.session_state.origin = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
