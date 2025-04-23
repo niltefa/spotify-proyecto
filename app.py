@@ -17,9 +17,11 @@ FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
 ors_client = openrouteservice.Client(key=ORS_API_KEY)
 
 # Inicializar session_state
-for key in ['origin', 'route', 'route3d', 'history']:
+for key in ['origin', 'route', 'route3d', 'history', 'route_generated']:
     if key not in st.session_state:
-        st.session_state[key] = None if key != 'history' else []
+        # route_generated indica si ya se creó ruta
+        default = False if key == 'route_generated' else (None if key != 'history' else [])
+        st.session_state[key] = default
 
 # ——— Funciones ———
 def get_weather(lat, lon):
@@ -30,7 +32,6 @@ def get_weather(lat, lon):
     j = r.json()
     return {"temp": j["main"]["temp"], "condition": j["weather"][0]["main"], "wind": j["wind"]["speed"]}
 
-
 def get_forecast(lat, lon, hours=3):
     params = {"lat": lat, "lon": lon, "appid": OWM_API_KEY, "units": "metric"}
     r = requests.get(FORECAST_URL, params=params)
@@ -39,16 +40,13 @@ def get_forecast(lat, lon, hours=3):
     data = r.json().get('list', [])[:hours]
     return [{"time": item['dt_txt'], "temp": item['main']['temp'], "condition": item['weather'][0]['main']} for item in data]
 
-
 def compute_circular_route(origin, distance_m):
     lat0, lon0 = origin
-    # Punto destino a mitad de ruta
     bearing = np.random.uniform(0, 360)
     half_km = distance_m / 2000
     dest = geopy_distance.distance(kilometers=half_km).destination((lat0, lon0), bearing)
     lat1, lon1 = dest.latitude, dest.longitude
     coords = [(lon0, lat0), (lon1, lat1)]
-    # Solicitar ruta con elevación
     route = ors_client.directions(
         coords,
         profile='cycling-regular',
@@ -67,11 +65,11 @@ def compute_circular_route(origin, distance_m):
         "duration": summary['duration']
     }
 
-# ——— UI ———
+# ——— Interfaz ———
 st.set_page_config(page_title="🚴 Ruta de Ciclismo Avanzada", layout="wide")
 st.title("🚴 Recomienda tu Ruta de Ciclismo con Perfil de Elevación")
 
-# 1. Selección origen
+# 1. Selección de punto de origen
 st.subheader("1. Selecciona el punto de inicio (click en el mapa)")
 center = (40.4168, -3.7038)
 m = folium.Map(location=center, zoom_start=12)
@@ -100,26 +98,28 @@ if fcast:
     for f in fcast:
         st.write(f"- {f['time']}: {f['condition']}, {f['temp']}°C")
 
-# 4. Generar ruta y perfil
+# 4. Botón para generar ruta
 if st.button("4. Generar Ruta"):
     result = compute_circular_route((lat, lon), distance)
     st.session_state.route = result['coords']
     st.session_state.route3d = result['coords3d']
-    dist = result['distance']
-    dur = result['duration']
-    # guardar histórico
-    st.session_state.history.append((dist, dur))
-    # mostrar métricas
+    st.session_state.history.append((result['distance'], result['duration']))
+    st.session_state.route_generated = True
+
+# 5. Mostrar resultados si ya se generó ruta
+if st.session_state.route_generated:
+    dist = st.session_state.history[-1][0]
+    dur = st.session_state.history[-1][1]
     st.subheader("Ruta generada")
     st.write(f"• Distancia (ORS): {dist/1000:.1f} km")
     st.write(f"• Duración estimada (ORS): {dur/60:.1f} min")
-    # predicción personalizada
+    # Predicción basada en histórico
     if len(st.session_state.history) > 1:
         arr = np.array(st.session_state.history)
         coeffs = np.polyfit(arr[:,0], arr[:,1], 1)
-        pred = coeffs[0] * distance + coeffs[1]
+        pred = coeffs[0]*distance + coeffs[1]
         st.write(f"• Predicción personalizada: {pred/60:.1f} min")
-    # Gráfico de perfil de elevación
+    # Gráfico perfil de elevación
     if st.session_state.route3d:
         elevs = [pt[2] for pt in st.session_state.route3d]
         dists = [0.0]
@@ -137,7 +137,7 @@ if st.button("4. Generar Ruta"):
             title="Perfil de Elevación"
         )
         st.plotly_chart(fig, use_container_width=True)
-    # Mostrar mapa de ruta
+    # Mapa de ruta
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
     st.subheader("🗺️ Mapa de ruta")
