@@ -18,7 +18,7 @@ from staticmap import StaticMap, Line
 from PIL import Image
 
 st.set_page_config(
-    page_title='🚴 Tu rutilla',
+    page_title='Tu rutilla',
     page_icon='./favicon.ico',
     layout='wide',
     initial_sidebar_state='auto'
