@@ -4,6 +4,7 @@ import requests
 import numpy as np
 import pandas as pd
 import folium
+from folium.plugins import LocateControl
 import plotly.express as px
 from streamlit_folium import st_folium
 from geopy import distance as geopy_distance
@@ -100,6 +101,7 @@ st.title("🚴 Recomienda tu Ruta de Ciclismo con Perfil de Elevación y Desnive
 st.subheader("1. Selecciona el punto de inicio (click en el mapa)")
 center = (40.4168, -3.7038)
 m = folium.Map(location=center, zoom_start=12)
+LocateControl(auto_start=True).add_to(m)
 m.add_child(folium.LatLngPopup())
 map_data = st_folium(m, width=700, height=400)
 if map_data and map_data.get("last_clicked"):
