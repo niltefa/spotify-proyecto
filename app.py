@@ -24,8 +24,7 @@ TOKEN_URL = "https://accounts.spotify.com/api/token"
 
 # ——— UI ———
 st.title("🎧 Tu Huella Emocional Sonora")
-# Corrección: st.query_params es un dict-like, no llamable
-code = st.query_params.get("code", [None])[0]
+code = st.query_params().get("code", [None])[0]
 
 if not CLIENT_ID or not CLIENT_SECRET:
     st.error("❌ Configura CLIENT_ID y CLIENT_SECRET en Streamlit Secrets.")
@@ -44,18 +43,10 @@ resp = requests.post(
     headers={"Authorization": f"Basic {b64}"},
     data={"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI}
 )
-# Manejo de errores específicos
 if resp.status_code != 200:
-    err = resp.json().get("error")
-    desc = resp.json().get("error_description", "")
-    if err == "invalid_grant":
-        st.error("❌ Código de autorización inválido o expirado.")
-        st.markdown("Por favor, vuelve a iniciar sesión: [👉 Reintentar login con Spotify]({AUTH_URL})")
-        st.stop()
-    else:
-        st.error("❌ Error al obtener token:")
-        st.json(resp.json())
-        st.stop()
+    st.error("❌ Error al obtener token:")
+    st.json(resp.json())
+    st.stop()
 
 token = resp.json()["access_token"]
 sp = spotipy.Spotify(auth=token)
