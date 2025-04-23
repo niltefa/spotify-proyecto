@@ -34,8 +34,11 @@ if fetch_data and client_id and client_secret:
         client_id=client_id,
         client_secret=client_secret,
         redirect_uri=redirect_uri,
-        scope='user-read-recently-played'
+        scope='user-read-recently-played',
+        open_browser=False,
+        cache_path=".spotify_cache"
     ))
+
     st.write("✅ Autenticado. Descargando historial...")
     results = sp.current_user_recently_played(limit=100)
     data = []
