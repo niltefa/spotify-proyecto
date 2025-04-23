@@ -2,7 +2,5 @@ streamlit
 osmnx[all]
 networkx
 requests
-folium
-streamlit-folium
 numpy
-streamlit_leaflet
+streamlit-leaflet
