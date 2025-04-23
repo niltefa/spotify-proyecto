@@ -170,11 +170,9 @@ if st.session_state.route_generated:
     st.write(f"• Desnivel total (ascenso): {ascent:.0f} m")
     dif = predict_difficulty(dist, ascent, st.session_state.weather)
     st.write(f"• Dificultad estimada: **{dif}**")
-    # URL Google Maps
     url = generate_google_maps_url(st.session_state.route)
     st.markdown(f"[Ver ruta en Google Maps]({url})", unsafe_allow_html=True)
 
-    # Predicciones personalizadas
     if len(st.session_state.history) > 1:
         arr = np.array(st.session_state.history)
         coeffs_time = np.polyfit(arr[:,0], arr[:,1], 1)
@@ -199,54 +197,34 @@ if st.session_state.route_generated:
                   title="Perfil de Elevación")
     st.plotly_chart(fig, use_container_width=True)
 
-    # Mapa interactivo
-    st.subheader("🗺️ Mapa de ruta")
-    m2 = folium.Map(location=[lat, lon], zoom_start=13)
-    folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
-    st_folium(m2, width=700, height=300)
-
-    # -------------------- PDF --------------------
-    # Static map usando OpenRouteService
-    coords = [(lon, lat) for lat, lon in st.session_state.route]
-    geojson = {
-        "type": "FeatureCollection",
-        "features": [
-            {"type": "Feature",
-             "geometry": {"type": "LineString", "coordinates": coords}}
-        ]
-    }
-    try:
-        static_img = ors_client.request(
-            "staticmap",
-            params={"geojson": geojson, "size": [700, 300]}
-        )
-        map_png = static_img
-    except Exception as e:
-        print("ERROR: ", e)
-        map_png = None
+    # Generar PNG de mapa estático con OSM StaticMap
+    sampled = st.session_state.route
+    if len(sampled) > 100:
+        idx = np.linspace(0, len(sampled)-1, 100, dtype=int)
+        sampled = [sampled[i] for i in idx]
+    path_str = "color:blue|weight:4|" + "|".join(f"{lat},{lon}" for lat, lon in sampled)
+    osm_url = f"https://staticmap.openstreetmap.de/staticmap.php?size=700x300&path={path_str}"
+    resp = requests.get(osm_url)
+    map_png = resp.content if resp.status_code == 200 else None
 
     if map_png:
+        # Generación del PDF
         pdf_buffer = io.BytesIO()
         c = canvas.Canvas(pdf_buffer, pagesize=letter)
         w_pt, h_pt = letter
 
-        # Título
         c.setFont("Helvetica-Bold", 18)
         c.drawCentredString(w_pt/2, h_pt - 50, "🛣 Detalle de la Ruta de Ciclismo")
-
-        # Mapa estático
         img = ImageReader(io.BytesIO(map_png))
         c.drawImage(img, 50, h_pt - 100 - 300, width=500, height=300)
 
-        # Datos
         y0 = h_pt - 420
         c.setFont("Helvetica", 12)
-        c.drawString(50, y0,      f"• Distancia: {dist/1000:.2f} km")
-        c.drawString(50, y0-20,   f"• Duración: {dur/60:.1f} min")
-        c.drawString(50, y0-40,   f"• Desnivel: {ascent:.0f} m")
-        c.drawString(50, y0-60,   f"• Dificultad: {dif}")
+        c.drawString(50, y0,    f"• Distancia: {dist/1000:.2f} km")
+        c.drawString(50, y0-20, f"• Duración: {dur/60:.1f} min")
+        c.drawString(50, y0-40, f"• Desnivel: {ascent:.0f} m")
+        c.drawString(50, y0-60, f"• Dificultad: {dif}")
 
-        # Perfil de elevación en PNG
         prof_png = fig.to_image(format="png")
         prof_img = ImageReader(io.BytesIO(prof_png))
         c.drawImage(prof_img, 50, y0 - 360, width=500, height=250)
