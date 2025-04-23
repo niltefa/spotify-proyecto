@@ -277,7 +277,6 @@ if st.session_state.route_generated:
     c.drawString(50, y0, f"• Distancia: {dist/1000:.2f} km")
     c.drawString(50, y0-20, f"• Duración: {dur/60:.1f} min")
     c.drawString(50, y0-40, f"• Desnivel total : {ascent:.0f} m")
-    c.drawString(50, y0-40, f"• Desnivel: {ascent:.0f} m")
     c.drawString(50, y0-80, f"• Velocidad media: {avg_speed:.1f} km/h")
     c.drawString(50, y0-100, f"• Calorías: {calories:.0f} kcal")
     c.drawString(50, y0-120, f"• Dificultad: {dif}")
