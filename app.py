@@ -24,7 +24,7 @@ AUTH_URL = f"https://accounts.spotify.com/authorize?client_id={CLIENT_ID}&respon
 # ---------- STREAMLIT UI ----------
 st.title("🎧 Tu Huella Emocional Sonora")
 
-query_params = st.experimental_get_query_params()
+query_params = st.query_params
 code = query_params.get("code", [None])[0]
 
 if code is None:
