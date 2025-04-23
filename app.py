@@ -56,7 +56,7 @@ st.success("✅ Autenticado. Cargando historial…")
 HEADERS_MB = {"User-Agent": "TuHuellaEmocionalSonora/1.0 (youremail@example.com)"}
 
 @st.cache_data
- def get_acousticbrainz_features(track_id: str) -> dict:
+def get_acousticbrainz_features(track_id: str) -> dict:
     """
     Dado un track_id de Spotify:
       1. Obtiene ISRC vía sp.track
