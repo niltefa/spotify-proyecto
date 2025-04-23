@@ -18,7 +18,7 @@ from staticmap import StaticMap, Line
 from PIL import Image
 
 st.set_page_config(
-    page_title='Tu rutilla',
+    page_title='🚴 Tu rutilla',
     page_icon='./favicon.ico',
     layout='wide',
     initial_sidebar_state='auto'
@@ -135,7 +135,10 @@ def generate_google_maps_url(coords):
     return f"https://www.google.com/maps/dir/{path}"
 
 # ——— UI ———
-st.title("🚴 Recomienda tu ruta de ciclismo con perfil de elevación, desnivel, Google Maps...")
+st.title("🚴 Tu rutilla de ciclismo + métricas de rendimiento")
+
+# 0. Peso del usuario
+weight_kg = st.number_input("¿Cuál es tu peso? (kg)", min_value=40, max_value=150, value=70)
 
 # 1. Selección de origen
 st.subheader("1. Selecciona el punto de inicio (click en el mapa)")
@@ -143,10 +146,7 @@ center = (40.4168, -3.7038)
 m = folium.Map(location=center, zoom_start=12)
 LocateControl(auto_start=True).add_to(m)
 m.add_child(folium.LatLngPopup())
-
-# Altura fija pequeña para no dejar espacio en blanco
 map_data = st_folium(m, width=700, height=300)
-
 if map_data and map_data.get("last_clicked"):
     st.session_state.origin = (
         map_data['last_clicked']['lat'],
@@ -155,7 +155,6 @@ if map_data and map_data.get("last_clicked"):
 elif not st.session_state.origin:
     st.info("Haz click en el mapa para definir el origen.")
     st.stop()
-
 lat, lon = st.session_state.origin
 st.write(f"📍 Origen: ({lat:.6f}, {lon:.6f})")
 
@@ -197,22 +196,42 @@ if st.button("4. Generar ruta"):
         st.session_state.history_elev.append(ascent)
         st.session_state.route_generated = True
 
-# 5. Mostrar resultados y generar PDF solo si route_generated es True
+# 5. Mostrar resultados y métricas
 if st.session_state.route_generated:
-    dist = st.session_state.history[-1][0]
-    dur = st.session_state.history[-1][1]
-    ascent = st.session_state.history_elev[-1]
-    st.subheader("Ruta generada")
-    st.write(f"• Distancia (ORS): {dist/1000:.1f} km")
-    st.write(f"• Duración estimada (ORS): {dur/60:.1f} min")
-    st.write(f"• Desnivel total (ascenso): {ascent:.0f} m")
+    dist = st.session_state.history[-1][0]       # metros
+    dur = st.session_state.history[-1][1]        # segundos
+    ascent = st.session_state.history_elev[-1]   # metros
+
+    st.subheader("Ruta generada y métricas")
+    st.write(f"• Distancia: **{dist/1000:.1f} km**")
+    st.write(f"• Duración estimada: **{dur/60:.1f} min**")
+    
+    # → Velocidad media
+    dur_h = dur / 3600.0
+    avg_speed = (dist/1000.0) / dur_h if dur_h>0 else 0
+    st.write(f"• Velocidad media: **{avg_speed:.1f} km/h**")
+
+    # → Calorías estimadas
+    # MET según velocidad
+    if avg_speed < 16:
+        MET = 6
+    elif avg_speed < 20:
+        MET = 8
+    else:
+        MET = 10
+    calories = MET * weight_kg * dur_h
+    st.write(f"• Calorías estimadas: **{calories:.0f} kcal**")
+
+    # Dificultad
     dif = predict_difficulty(dist, ascent, st.session_state.weather)
-    st.write(f"• Dificultad estimada: **{dif}**")
+    st.write(f"• Dificultad: **{dif}**")
+
+    # Enlace a Google Maps
     st.markdown(
-        f"[Ver ruta en Google Maps]({generate_google_maps_url(st.session_state.route)})",
+        f"[➡️ Ver ruta en Google Maps]({generate_google_maps_url(st.session_state.route)})",
         unsafe_allow_html=True
     )
-    
+
     # Perfil de elevación
     coords3d = st.session_state.route3d
     dist_acc = [0.0]
@@ -233,13 +252,13 @@ if st.session_state.route_generated:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Mapa de ruta estático sobre Folium
+    # Mapa de ruta
     st.subheader("🗺️ Mapa de ruta")
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
     st_folium(m2, width=700, height=300, returned_objects=[])
 
-    # Generar PDF
+    # Generar y descargar PDF
     m_static = StaticMap(700, 300)
     m_static.add_line(Line([(lon, lat) for lat, lon in st.session_state.route], 'blue', 4))
     img_static = m_static.render()
@@ -258,15 +277,17 @@ if st.session_state.route_generated:
     c.drawString(50, y0, f"• Distancia: {dist/1000:.2f} km")
     c.drawString(50, y0-20, f"• Duración: {dur/60:.1f} min")
     c.drawString(50, y0-40, f"• Desnivel: {ascent:.0f} m")
-    c.drawString(50, y0-60, f"• Dificultad: {dif}")
+    c.drawString(50, y0-60, f"• Velocidad media: {avg_speed:.1f} km/h")
+    c.drawString(50, y0-80, f"• Calorías: {calories:.0f} kcal")
+    c.drawString(50, y0-100, f"• Dificultad: {dif}")
     prof_png = fig.to_image(format="png")
     c.drawImage(ImageReader(io.BytesIO(prof_png)), 50, y0-380, width=500, height=250)
     c.showPage()
     c.save()
     pdf_buf.seek(0)
     st.download_button(
-        "📄 Descargar PDF con la ruta (beta)",
+        "📄 Descargar PDF con la ruta y métricas",
         data=pdf_buf.read(),
-        file_name="ruta_ciclismo.pdf",
+        file_name="ruta_ciclismo_metrics.pdf",
         mime="application/pdf"
     )
