@@ -198,13 +198,6 @@ if st.session_state.route_generated:
     df_prof = pd.DataFrame({"distance_m": dist_acc, "elevation_m": [pt[2] for pt in coords3d]})
     fig = px.line(df_prof, x="distance_m", y="elevation_m", labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"}, title="Perfil de Elevación")
     st.plotly_chart(fig, use_container_width=True)
-    # Mapa de ruta
-    st.subheader("🗺️ Mapa de ruta")
-    m2 = folium.Map(location=[lat, lon], zoom_start=13)
-    folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
-    st_folium(m2, width=700, height=300, returned_objects=[])
-
-
 
     # Mapa de ruta y captura de imagen PNG
     st.subheader("🗺️ Mapa de ruta")
