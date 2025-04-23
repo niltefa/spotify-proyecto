@@ -13,23 +13,34 @@ import openai
 import os
 import base64
 
-# ---------- CONFIG ----------
+# ---------- STREAMLIT UI ----------
+st.title("🎧 Tu Huella Emocional Sonora")
+
+# Obtener CLIENT_ID y SECRET desde input si no están como variables de entorno
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+
+if CLIENT_ID is None or CLIENT_SECRET is None:
+    st.warning("🔐 Por favor, introduce tus credenciales de Spotify")
+    CLIENT_ID = st.text_input("Client ID")
+    CLIENT_SECRET = st.text_input("Client Secret", type="password")
+
 REDIRECT_URI = "https://tu-musiquilla.streamlit.app/"
 SCOPE = "user-read-recently-played"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
-AUTH_URL = f"https://accounts.spotify.com/authorize?client_id={CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&scope={SCOPE}"
 
-# ---------- STREAMLIT UI ----------
-st.title("🎧 Tu Huella Emocional Sonora")
+# Generar AUTH_URL solo si ya se tiene client_id
+AUTH_URL = f"https://accounts.spotify.com/authorize?client_id={CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&scope={SCOPE}" if CLIENT_ID else ""
 
 query_params = st.query_params
 code = query_params.get("code", [None])[0]
 
 if code is None:
-    st.markdown("### 🔐 Para comenzar, inicia sesión en Spotify")
-    st.markdown(f"[👉 Iniciar sesión con Spotify]({AUTH_URL})")
+    if CLIENT_ID and CLIENT_SECRET:
+        st.markdown("### 🔐 Para comenzar, inicia sesión en Spotify")
+        st.markdown(f"[👉 Iniciar sesión con Spotify]({AUTH_URL})")
+    else:
+        st.info("Introduce tus credenciales para generar el enlace de autenticación.")
 else:
     # ---------- INTERCAMBIAR CÓDIGO POR TOKEN ----------
     st.write("🔁 Intercambiando código por token...")
