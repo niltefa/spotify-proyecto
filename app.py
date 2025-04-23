@@ -1,4 +1,4 @@
-# Tu Huella Emocional Sonora - Versión OAuth adaptada a Streamlit Cloud con estado de sesión
+# Tu Huella Emocional Sonora - Autenticación Spotify con ID y Secret en la URL
 
 import pandas as pd
 import numpy as np
@@ -16,28 +16,32 @@ import base64
 # ---------- STREAMLIT UI ----------
 st.title("🎧 Tu Huella Emocional Sonora")
 
-# Obtener o guardar credenciales en session_state
-if "CLIENT_ID" not in st.session_state:
-    st.session_state.CLIENT_ID = os.getenv("CLIENT_ID")
-if "CLIENT_SECRET" not in st.session_state:
-    st.session_state.CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+# Extraer credenciales desde URL si están disponibles
+query_params = st.query_params
+code = query_params.get("code", [None])[0]
+url_client_id = query_params.get("client_id", [None])[0]
+url_client_secret = query_params.get("client_secret", [None])[0]
 
-if not st.session_state.CLIENT_ID or not st.session_state.CLIENT_SECRET:
-    st.warning("🔐 Por favor, introduce tus credenciales de Spotify")
-    st.session_state.CLIENT_ID = st.text_input("Client ID", value=st.session_state.CLIENT_ID or "")
-    st.session_state.CLIENT_SECRET = st.text_input("Client Secret", value=st.session_state.CLIENT_SECRET or "", type="password")
+# Guardar en session_state si existen
+if url_client_id:
+    st.session_state.CLIENT_ID = url_client_id
+if url_client_secret:
+    st.session_state.CLIENT_SECRET = url_client_secret
+
+# Inputs en caso de no estar definidos aún
+if "CLIENT_ID" not in st.session_state:
+    st.session_state.CLIENT_ID = st.text_input("Client ID")
+if "CLIENT_SECRET" not in st.session_state:
+    st.session_state.CLIENT_SECRET = st.text_input("Client Secret", type="password")
 
 CLIENT_ID = st.session_state.CLIENT_ID
 CLIENT_SECRET = st.session_state.CLIENT_SECRET
 
-REDIRECT_URI = "https://tu-musiquilla.streamlit.app/"
+REDIRECT_URI = f"https://tu-musiquilla.streamlit.app/?client_id={CLIENT_ID}&client_secret={CLIENT_SECRET}"
 SCOPE = "user-read-recently-played"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 
 AUTH_URL = f"https://accounts.spotify.com/authorize?client_id={CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&scope={SCOPE}" if CLIENT_ID else ""
-
-query_params = st.query_params
-code = query_params.get("code", [None])[0]
 
 if code is None:
     if CLIENT_ID and CLIENT_SECRET:
@@ -46,7 +50,6 @@ if code is None:
     else:
         st.info("Introduce tus credenciales para generar el enlace de autenticación.")
 else:
-    # ---------- INTERCAMBIAR CÓDIGO POR TOKEN ----------
     st.write("🔁 Intercambiando código por token...")
     auth_str = f"{CLIENT_ID}:{CLIENT_SECRET}"
     b64_auth_str = base64.b64encode(auth_str.encode()).decode()
