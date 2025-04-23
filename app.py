@@ -1,4 +1,4 @@
-# app.py
+# Tu Huella Emocional Sonora - App Final
 
 import os, base64, requests
 import pandas as pd, numpy as np
@@ -24,12 +24,10 @@ TOKEN_URL = "https://accounts.spotify.com/api/token"
 
 # ——— UI ———
 st.title("🎧 Tu Huella Emocional Sonora")
-
-# Captura el código de Spotify tras redirigir a /callback
 code = st.experimental_get_query_params().get("code", [None])[0]
 
 if not CLIENT_ID or not CLIENT_SECRET:
-    st.error("❌ Define CLIENT_ID y CLIENT_SECRET en Streamlit Secrets antes de continuar.")
+    st.error("❌ Configura CLIENT_ID y CLIENT_SECRET en Streamlit Secrets.")
     st.stop()
 
 if not code:
@@ -42,15 +40,8 @@ st.info("🔁 Intercambiando código por token...")
 b64 = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
 resp = requests.post(
     TOKEN_URL,
-    headers={
-      "Authorization": f"Basic {b64}",
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    data={
-      "grant_type":    "authorization_code",
-      "code":          code,
-      "redirect_uri":  REDIRECT_URI
-    }
+    headers={"Authorization": f"Basic {b64}"},
+    data={"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI}
 )
 if resp.status_code != 200:
     st.error("❌ Error al obtener token:")
@@ -59,45 +50,53 @@ if resp.status_code != 200:
 
 token = resp.json()["access_token"]
 sp = spotipy.Spotify(auth=token)
-st.success("✅ Autenticado. Cargando historial musical…")
+st.success("✅ Autenticado. Cargando historial…")
 
 # ——— DATA & ANÁLISIS ———
-items = sp.current_user_recently_played(limit=100)["items"]
-df = pd.DataFrame([{
-    "track": t["track"]["name"],
-    "artist": t["track"]["artists"][0]["name"],
-    "played_at": t["played_at"],
-    **sp.audio_features(t["track"]["id"])[0]
-} for t in items])
+# Spotify permite max 50 en recently_played
+items = sp.current_user_recently_played(limit=50)["items"]
+
+records = []
+for t in items:
+    f = sp.audio_features(t["track"]["id"])[0]
+    records.append({
+        "track": t["track"]["name"],
+        "artist": t["track"]["artists"][0]["name"],
+        "played_at": t["played_at"],
+        **{k: f[k] for k in ["valence","energy","danceability","tempo"]}
+    })
+
+df = pd.DataFrame(records)
 df["played_at"] = pd.to_datetime(df["played_at"])
 df["date"] = df["played_at"].dt.date
-conds = [
-  df["valence"] >= 0.7,
-  (df["valence"] >= 0.4)&(df["valence"]<0.7),
-  df["valence"] < 0.4
-]
+conds = [df.valence>=0.7, (df.valence>=0.4)&(df.valence<0.7), df.valence<0.4]
 df["state"] = np.select(conds, ["Feliz","Neutral","Triste"], default="Desconocido")
 
-daily = df.groupby("date")[["valence","energy","danceability"]].mean().reset_index()
-daily["cluster"] = KMeans(n_clusters=3,random_state=42)\
-                   .fit_predict(daily[["valence","energy"]])
+daily = df.groupby("date")[['valence','energy','danceability']].mean().reset_index()
+daily['cluster'] = KMeans(3,random_state=42).fit_predict(daily[['valence','energy']])
 
-# ——— PLOTS ———
+# ——— VISUALS ———
 st.subheader("📈 Evolución emocional diaria")
-st.plotly_chart(px.line(daily, "date","valence",color=daily.cluster.astype(str)))
+st.plotly_chart(px.line(daily,'date','valence',color=daily.cluster.astype(str)))
 
-st.subheader("🕸️ Radar de estados emocionales")
-radar = df.groupby("state")[["valence","energy","danceability"]].mean().reset_index()
-st.plotly_chart(px.line_polar(radar, r="valence",theta="state",line_close=True))
+st.subheader("🕸️ Radar estados emocionales")
+radar = df.groupby('state')[['valence','energy','danceability']].mean().reset_index()
+st.plotly_chart(px.line_polar(radar,r='valence',theta='state',line_close=True))
 
 st.subheader("📊 Clusters de días (PCA)")
-pca = PCA(2).fit_transform(daily[["valence","energy"]])
-daily["pca1"], daily["pca2"] = pca[:,0], pca[:,1]
-st.plotly_chart(px.scatter(daily,"pca1","pca2",color=daily.cluster.astype(str)))
+pca = PCA(2).fit_transform(daily[['valence','energy']])
+daily['pca1'],daily['pca2']=pca[:,0],pca[:,1]
+st.plotly_chart(px.scatter(daily,'pca1','pca2',color=daily.cluster.astype(str)))
 
 st.subheader("🧠 Reflexión rápida")
-avg = daily["valence"].mean()
-if avg>0.6:   msg="🎉 Semana alegre y enérgica"
-elif avg>0.4: msg="😌 Semana equilibrada"
-else:         msg="🌧️ Semana introspectiva"
+avg=daily.valence.mean()
+msg="🎉 Semana alegre" if avg>0.6 else ("😌 Semana equilibrada" if avg>0.4 else "🌧️ Semana introspectiva")
 st.info(msg)
+
+# ——— PLAYLIST ———
+st.subheader("🎼 Playlist sugerida")
+today_cluster=daily.iloc[-1].cluster
+labels={0:'épico',1:'relajado',2:'emocional'}
+st.markdown(f"Hoy un día **{labels[today_cluster]}**, top tracks:")
+for _,r in df[df.date==df.date.max()].nlargest(5,'valence').iterrows():
+    st.write(f"🎵 {r.track} - {r.artist} (Valence: {r.valence:.2f})")
