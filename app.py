@@ -1,148 +1,82 @@
-import os
-import base64
-import requests
-import pandas as pd
-import numpy as np
-import plotly.express as px
 import streamlit as st
-import spotipy
+import osmnx as ox
+import networkx as nx
+import requests
+import folium
+from streamlit_folium import st_folium
+import numpy as np
 
-# Herramientas de audio
-import tempfile
+# Configuración API Clima
+OWM_API_KEY = st.secrets.get("OPENWEATHERMAP_KEY")
+WEATHER_URL = "https://api.openweathermap.org/data/2.5/weather"
 
-def extract_local_features(preview_url: str) -> dict:
-    """
-    Descarga el preview de Spotify y extrae características con librosa:
-    - tempo (BPM)
-    - energy (RMS)
-    - danceability (media del onset strength)
-    - spectral_centroid (proxy de brillantez)
-    """
-    try:
-        import librosa
-    except ImportError:
-        st.warning("librosa no está instalado: instala librosa para extracción local.")
-        return {}
+# ——— Funciones de Rutas ———
+def download_graph(center_point, dist=5000):
+    """Descarga grafo de carreteras alrededor de un punto (lat, lon)."""
+    G = ox.graph_from_point(center_point, dist=dist, network_type='bike', simplify=True)
+    return G
 
-    if not preview_url:
-        return {}
+def add_elevation(G):
+    """Anexa elevación a los nodos usando SRTM via osmnx."""
+    G = ox.add_node_elevations_raster(G, max_locations_per_batch=100)
+    G = ox.add_edge_grades(G)
+    return G
 
-    # Descarga preview a archivo temporal
-    r = requests.get(preview_url)
-    if r.status_code != 200:
-        return {}
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-    tmp.write(r.content)
-    tmp.flush()
+def compute_route(G, origin_point, distance, weight='length'):
+    """Genera ruta aproximada circular desde origen con distancia objetivo en metros."""
+    # Encuentra nodo más cercano
+    orig_node = ox.distance.nearest_nodes(G, origin_point[1], origin_point[0])
+    # Camino: heurística de vorágine radial + Dijkstra
+    # Para MVP: encuentra punto destino al azar en anillo
+    nodes = list(G.nodes)
+    lengths = nx.shortest_path_length(G, orig_node, weight=weight)
+    # Filtrar nodos cerca de distancia
+    candidates = [n for n,d in lengths.items() if abs(d - distance/2) < distance*0.1]
+    if not candidates:
+        return []
+    target = candidates[np.random.randint(len(candidates))]
+    # Ruta ida
+    path1 = nx.shortest_path(G, orig_node, target, weight=weight)
+    # Ruta vuelta
+    path2 = list(reversed(path1))
+    route = path1 + path2
+    return route
 
-    # Carga audio
-    y, sr = librosa.load(tmp.name, sr=None)
+# ——— Función clima ———
+def get_weather(lat, lon):
+    params = {"lat": lat, "lon": lon, "appid": OWM_API_KEY, "units": "metric"}
+    resp = requests.get(WEATHER_URL, params=params)
+    if resp.status_code != 200:
+        return None
+    data = resp.json()
+    return {"temp": data["main"]["temp"], "rain": data.get("weather")[0]["main"], "wind": data["wind"]["speed"]}
 
-    # Tempo
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    # Energy (RMS)
-    rms = np.mean(librosa.feature.rms(y=y))
-    # Danceability proxy (onset strength)
-    onset = librosa.onset.onset_strength(y=y, sr=sr)
-    dance = float(np.mean(onset))
-    # Brillo proxy (centroid)
-    centroid = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
+# ——— INTERFAZ STREAMLIT ———
+st.title("🚴 Recomienda tu Ruta de Ciclismo")
 
-    return {
-        "danceability": dance,
-        "energy": rms,
-        "valence": None,
-        "tempo": tempo,
-        "spectral_centroid": centroid
-    }
+# Selección de ubicación de inicio
+lat = st.number_input("Latitud de inicio", format="%.6f", value=40.4168)
+lon = st.number_input("Longitud de inicio", format="%.6f", value=-3.7038)
+distance = st.slider("Distancia deseada (km)", 5, 50, 20) * 1000
 
-# ——— CONFIG ———
-CLIENT_ID     = os.getenv("CLIENT_ID")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-REDIRECT_URI  = "https://tu-musiquilla.streamlit.app/callback"
-SCOPE         = "user-read-recently-played"
-AUTH_URL      = (
-    f"https://accounts.spotify.com/authorize"
-    f"?client_id={CLIENT_ID}"
-    f"&response_type=code"
-    f"&redirect_uri={REDIRECT_URI}"
-    f"&scope={SCOPE}"
-)
-TOKEN_URL = "https://accounts.spotify.com/api/token"
+dither = st.checkbox("Incluir elevación?", value=True)
+weather = get_weather(lat, lon)
+if weather:
+    st.write(f"🌡️ {weather['temp']} °C, ☁️ {weather['rain']}, 💨 {weather['wind']} m/s")
+    if weather['rain'] in ['Rain','Drizzle']:
+        st.warning("¡Está lloviendo! Puedes ajustar tu ruta o posponer el paseo.")
 
-# ——— UI ———
-st.set_page_config(page_title="🎧 Tu Huella Emocional Sonora")
-st.title("🎧 Tu Huella Emocional Sonora")
-code = st.experimental_get_query_params().get("code", [None])[0]
-
-if not CLIENT_ID or not CLIENT_SECRET:
-    st.error("❌ Configura CLIENT_ID y CLIENT_SECRET en Streamlit Secrets.")
-    st.stop()
-if not code:
-    st.markdown("### 🔐 Inicia sesión con Spotify para continuar")
-    st.markdown(f"[👉 Login con Spotify]({AUTH_URL})")
-    st.stop()
-
-# ——— TOKEN ———
-st.info("🔁 Intercambiando código por token...")
-b64 = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
-resp = requests.post(
-    TOKEN_URL,
-    headers={"Authorization": f"Basic {b64}"},
-    data={"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI}
-)
-if resp.status_code != 200:
-    st.error("❌ Error al obtener token:")
-    st.json(resp.json())
-    st.stop()
-
-token = resp.json().get("access_token")
-sp = spotipy.Spotify(auth=token)
-st.success("✅ Autenticado. Cargando historial…")
-
-# ——— DATOS & EXTRACCIÓN ———
-items = sp.current_user_recently_played(limit=50)["items"]
-records = []
-
-for t in items:
-    tr = t["track"]
-    track_id = tr["id"]
-    name = tr["name"]
-    artist = tr["artists"][0]["name"]
-    played_at = t["played_at"]
-    # Intento de preview local
-    preview_url = tr.get("preview_url")
-    feats = extract_local_features(preview_url)
-    records.append({
-        "track": name,
-        "artist": artist,
-        "played_at": played_at,
-        **feats
-    })
-
-df = pd.DataFrame(records)
-df["played_at"] = pd.to_datetime(df["played_at"])
-df["date"] = df["played_at"].dt.date
-
-# ——— VISUALIZACIÓN ———
-st.subheader("🎶 Últimas 50 canciones con features locales")
-st.dataframe(df)
-
-st.subheader("📈 Evolución diaria (tempo)")
-daily = df.groupby("date")[['tempo','energy','danceability']].mean().reset_index()
-st.plotly_chart(px.line(daily, 'date', 'tempo', title='Tempo diario'))
-
-st.subheader("🕸️ Radar energética")
-radar = df[['energy','danceability','spectral_centroid']].mean().to_frame().T
-radar['state'] = ['Global']
-st.plotly_chart(px.line_polar(radar, r='energy', theta='state', line_close=True, title='Perfil energético'))
-
-st.subheader("🧠 Reflexión rápida")
-avg_tempo = daily['tempo'].mean()
-msg = f"🎵 Tempo medio: {avg_tempo:.1f} BPM"
-st.info(msg)
-
-# Playlist simple
-st.subheader("🎼 Playlist (preview)")
-for _,r in df.nlargest(5, 'tempo').iterrows():
-    st.write(f"🎵 {r['track']} - {r['artist']} (Tempo: {r['tempo']:.1f})")
+if st.button("Generar Ruta"):
+    with st.spinner("Descargando grafo y calculando..."):
+        G = download_graph((lat, lon), dist=int(distance*1.2))
+        if dither:
+            G = add_elevation(G)
+        route = compute_route(G, (lat, lon), distance)
+        if not route:
+            st.error("No se pudo generar una ruta con esos parámetros.")
+        else:
+            # Visualiza con folium
+            m = folium.Map(location=[lat, lon], zoom_start=13)
+            coords = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in route]
+            folium.PolyLine(coords, color='blue', weight=5).add_to(m)
+            st_folium(m, width=700, height=500)

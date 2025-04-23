@@ -1,11 +1,3 @@
-streamlit
-matplotlib
-spotipy
-pandas
-numpy
-scikit-learn
-plotly
-openai
 librosa
 soundfile
 audioread
