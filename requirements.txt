@@ -9,3 +9,4 @@ geopy
 openrouteservice
 reportlab
 staticmap
+kaleido
