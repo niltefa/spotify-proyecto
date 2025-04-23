@@ -29,13 +29,14 @@ with st.sidebar:
     fetch_data = st.button("Cargar historial musical")
 
 if fetch_data and client_id and client_secret:
+    st.write("🔁 Iniciando autenticación con Spotify...")
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
         client_id=client_id,
         client_secret=client_secret,
         redirect_uri=redirect_uri,
         scope='user-read-recently-played'
     ))
-
+    st.write("✅ Autenticado. Descargando historial...")
     results = sp.current_user_recently_played(limit=100)
     data = []
     for item in results['items']:
@@ -51,7 +52,7 @@ if fetch_data and client_id and client_secret:
             'tempo': features['tempo'],
             'id': track['id']
         })
-
+    st.write(f"🎼 Canciones obtenidas: {len(data)}")
     songs = pd.DataFrame(data)
     songs['played_at'] = pd.to_datetime(songs['played_at'])
     songs['date'] = songs['played_at'].dt.date
