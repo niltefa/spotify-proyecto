@@ -17,6 +17,8 @@ from reportlab.lib.utils import ImageReader
 from staticmap import StaticMap, Line
 from PIL import Image
 
+st.set_page_config(page_title='🚴 Tu rutilla', page_icon='./favicon.ico', layout='wide', initial_sidebar_state='auto')
+
 # Configuración APIs
 t = st.secrets
 ORS_API_KEY = t.get("OPENROUTESERVICE_KEY")
@@ -114,9 +116,19 @@ def generate_google_maps_url(coords):
     path = "/".join(f"{lat},{lon}" for lat, lon in pts)
     return f"https://www.google.com/maps/dir/{path}"
 
+
+
+
+
+
+
+
+
+
+
+
 # ——— UI ———
-st.set_page_config(page_title="🚴 Ruta de Ciclismo Avanzada", layout="wide")
-st.title("🚴 Recomienda tu Ruta de Ciclismo con Perfil de Elevación, Desnivel y Google Maps")
+st.title("🚴 Recomienda tu ruta de ciclismo con perfil de elevación, desnivel, Google Maps...")
 
 # 1. Selección de origen
 st.subheader("1. Selecciona el punto de inicio (click en el mapa)")
@@ -153,7 +165,7 @@ else:
     st.write("No se pudo obtener clima.")
 
 # 4. Generar ruta
-if st.button("4. Generar Ruta"):
+if st.button("4. Generar ruta"):
     try:
         res = compute_circular_route((lat, lon), distance)
     except ApiError as e:
@@ -214,7 +226,7 @@ if st.session_state.route_generated:
     c = canvas.Canvas(pdf_buf, pagesize=letter)
     w_pt, h_pt = letter
     c.setFont("Helvetica-Bold", 18)
-    c.drawCentredString(w_pt/2, h_pt - 50, "🛣 Detalle de la Ruta de Ciclismo")
+    c.drawCentredString(w_pt/2, h_pt - 50, "Detalle de la ruta de ciclismo")
     c.drawImage(ImageReader(io.BytesIO(map_png)), 50, h_pt - 400, width=500, height=300)
     y0 = h_pt - 420
     c.setFont("Helvetica", 12)
