@@ -195,8 +195,7 @@ if st.button("4. Generar ruta"):
         elevs = [pt[2] for pt in st.session_state.route3d]
         # Cálculo de desnivel positivo y negativo
         ascent = sum(max(elevs[i] - elevs[i-1], 0) for i in range(1, len(elevs)))
-        descent = sum(max(elevs[i-1] - elevs[i], 0) for i in range(1, len(elevs)))
-        st.session_state.history.append((dist, dur, ascent, descent))
+        st.session_state.history.append((dist, dur, ascent))
         st.session_state.route_generated = True
 
 # 5. Mostrar resultados y métricas
@@ -206,7 +205,7 @@ if st.session_state.route_generated:
     st.subheader("Ruta generada y métricas")
     st.write(f"• Distancia: **{dist/1000:.1f} km**")
     st.write(f"• Duración estimada: **{dur/60:.1f} min**")
-    st.write(f"• Desnivel positivo: **{ascent:.0f} m**, negativo: **{descent:.0f} m**")
+    st.write(f"• Desnivel positivo: **{ascent:.0f} m**")
     
     # → Velocidad media
     dur_h = dur / 3600.0
@@ -277,8 +276,7 @@ if st.session_state.route_generated:
     c.setFont("Helvetica", 12)
     c.drawString(50, y0, f"• Distancia: {dist/1000:.2f} km")
     c.drawString(50, y0-20, f"• Duración: {dur/60:.1f} min")
-    c.drawString(50, y0-40, f"• Desnivel + : {ascent:.0f} m")
-    c.drawString(50, y0-60, f"• Desnivel - : {descent:.0f} m")
+    c.drawString(50, y0-40, f"• Desnivel total : {ascent:.0f} m")
     c.drawString(50, y0-40, f"• Desnivel: {ascent:.0f} m")
     c.drawString(50, y0-80, f"• Velocidad media: {avg_speed:.1f} km/h")
     c.drawString(50, y0-100, f"• Calorías: {calories:.0f} kcal")
