@@ -117,16 +117,6 @@ def generate_google_maps_url(coords):
     return f"https://www.google.com/maps/dir/{path}"
 
 
-
-
-
-
-
-
-
-
-
-
 # ——— UI ———
 st.title("🚴 Recomienda tu ruta de ciclismo con perfil de elevación, desnivel, Google Maps...")
 
@@ -136,7 +126,7 @@ center = (40.4168, -3.7038)
 m = folium.Map(location=center, zoom_start=12)
 LocateControl(auto_start=True).add_to(m)
 m.add_child(folium.LatLngPopup())
-dynamic_height = 600 if st.session_state.origin is None else 800
+dynamic_height = 200 if st.session_state.origin is None else 300
 map_data = st_folium(m, width=700, height=dynamic_height)
 if map_data and map_data.get("last_clicked"):
     st.session_state.origin = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
