@@ -28,16 +28,22 @@ for key in ['origin', 'route', 'route3d', 'history', 'history_elev', 'route_gene
         else:
             st.session_state[key] = None
 
-# ——— Funciones ———
-def get_weather(lat, lon):
-    params = {"lat": lat, "lon": lon, "appid": OWM_API_KEY, "units": "metric"}
-    r = requests.get(WEATHER_URL, params=params)
-    if r.status_code != 200:
-        return None
-    j = r.json()
-    return {"temp": j["main"]["temp"], "condition": j["weather"][0]["main"], "wind": j["wind"]["speed"]}
+# 3. Clima en origen
+st.subheader("3. Clima en origen")
+w = get_weather(lat, lon)
+st.session_state.weather = w
+if w:
+    st.write(f"🌡️ {w['temp']} °C — {w['condition']} — 💨 {w['wind']} m/s")
+    # Mostrar pronóstico
+    fcast = get_forecast(lat, lon)
+    if fcast:
+        st.write("🔮 Pronóstico próximo:")
+        for f in fcast:
+            st.write(f"- {f['time']}: {f['condition']}, {f['temp']}°C")
+else:
+    st.write("No se pudo obtener clima.")
 
-def compute_circular_route(origin, distance_m):
+# 4. Generar ruta(origin, distance_m):
     lat0, lon0 = origin
     bearing = np.random.uniform(0, 360)
     half_km = distance_m / 2000.0
