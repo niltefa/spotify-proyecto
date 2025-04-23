@@ -37,6 +37,7 @@ def get_weather(lat, lon):
     j = r.json()
     return {"temp": j["main"]["temp"], "condition": j["weather"][0]["main"], "wind": j["wind"]["speed"]}
 
+
 def get_forecast(lat, lon, hours=3):
     params = {"lat": lat, "lon": lon, "appid": OWM_API_KEY, "units": "metric"}
     r = requests.get(FORECAST_URL, params=params)
@@ -45,11 +46,12 @@ def get_forecast(lat, lon, hours=3):
     data = r.json().get('list', [])[:hours]
     return [{"time": item['dt_txt'], "temp": item['main']['temp'], "condition": item['weather'][0]['main']} for item in data]
 
+
 def compute_circular_route(origin, distance_m):
     lat0, lon0 = origin
-    # Punto destino a mitad de ruta
+    # Calcular punto destino a mitad de ruta al azar
     bearing = np.random.uniform(0, 360)
-    half_km = distance_m / 2000
+    half_km = distance_m / 2000.0
     dest = geopy_distance.distance(kilometers=half_km).destination((lat0, lon0), bearing)
     lat1, lon1 = dest.latitude, dest.longitude
     coords = [(lon0, lat0), (lon1, lat1)]
@@ -113,7 +115,7 @@ if st.button("4. Generar Ruta"):
     st.session_state.route = res['coords']
     st.session_state.route3d = res['coords3d']
     dist = res['distance']; dur = res['duration']
-    # Calcular desnivel (suma de ascensos)
+    # Calcular desnivel (ascenso)
     elevs = [pt[2] for pt in st.session_state.route3d]
     ascent = sum(max(elevs[i] - elevs[i-1], 0) for i in range(1, len(elevs)))
     # Historial
@@ -121,37 +123,49 @@ if st.button("4. Generar Ruta"):
     st.session_state.history_elev.append(ascent)
     st.session_state.route_generated = True
 
-# 5. Mostrar resultados si ya se generó ruta
+# 5. Mostrar resultados (persisten tras rerender)
 if st.session_state.route_generated:
     dist = st.session_state.history[-1][0]
     dur = st.session_state.history[-1][1]
     ascent = st.session_state.history_elev[-1]
+    # Resumen ruta
     st.subheader("Ruta generada")
     st.write(f"• Distancia (ORS): {dist/1000:.1f} km")
     st.write(f"• Duración estimada (ORS): {dur/60:.1f} min")
     st.write(f"• Desnivel total (ascenso): {ascent:.0f} m")
-    # Predicción basada en histórico de tiempo
+
+    # Predicciones
     if len(st.session_state.history) > 1:
         arr = np.array(st.session_state.history)
-        coeffs = np.polyfit(arr[:,0], arr[:,1], 1)
-        pred_time = coeffs[0]*distance + coeffs[1]
+        coeffs_time = np.polyfit(arr[:,0], arr[:,1], 1)
+        pred_time = coeffs_time[0] * distance + coeffs_time[1]
         st.write(f"• Predicción personalizada tiempo: {pred_time/60:.1f} min")
-    # Predicción basada en histórico de desnivel
     if len(st.session_state.history_elev) > 1:
         dists = [h[0] for h in st.session_state.history]
-        coeffs_e = np.polyfit(dists, st.session_state.history_elev, 1)
-        pred_elev = coeffs_e[0]*distance + coeffs_e[1]
+        coeffs_elev = np.polyfit(dists, st.session_state.history_elev, 1)
+        pred_elev = coeffs_elev[0] * distance + coeffs_elev[1]
         st.write(f"• Predicción personalizada desnivel: {pred_elev:.0f} m")
+
     # Gráfico perfil de elevación
     coords3d = st.session_state.route3d
     dist_acc = [0.0]
     for i in range(1, len(coords3d)):
         p0 = coords3d[i-1]; p1 = coords3d[i]
-        seg = geopy_distance.distance((p0[0], p0[1]), (p1[0], p1[1])).km*1000
+        seg = geopy_distance.distance((p0[0], p0[1]), (p1[0], p1[1])).km * 1000
         dist_acc.append(dist_acc[-1] + seg)
-    df_prof = pd.DataFrame({"distance_m": dist_acc, "elevation_m": [pt[2] for pt in coords3d]})
-    fig = px.line(df_prof, x="distance_m", y="elevation_m", labels={"distance_m":"Distancia (m)","elevation_m":"Elevación (m)"}, title="Perfil de Elevación")
+    df_prof = pd.DataFrame({
+        "distance_m": dist_acc,
+        "elevation_m": [pt[2] for pt in coords3d]
+    })
+    fig = px.line(
+        df_prof,
+        x="distance_m",
+        y="elevation_m",
+        labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"},
+        title="Perfil de Elevación"
+    )
     st.plotly_chart(fig, use_container_width=True)
+
     # Mapa de ruta
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
