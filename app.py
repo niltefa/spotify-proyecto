@@ -193,30 +193,27 @@ if st.button("4. Generar ruta"):
         st.session_state.route3d = res['coords3d']
         dist = res['distance']; dur = res['duration']
         elevs = [pt[2] for pt in st.session_state.route3d]
-        ascent = sum(
-            max(elevs[i] - elevs[i-1], 0)
-            for i in range(1, len(elevs))
-        )
-        st.session_state.history.append((dist, dur))
-        st.session_state.history_elev.append(ascent)
+        # Cálculo de desnivel positivo y negativo
+        ascent = sum(max(elevs[i] - elevs[i-1], 0) for i in range(1, len(elevs)))
+        descent = sum(max(elevs[i-1] - elevs[i], 0) for i in range(1, len(elevs)))
+        st.session_state.history.append((dist, dur, ascent, descent))
         st.session_state.route_generated = True
 
 # 5. Mostrar resultados y métricas
 if st.session_state.route_generated:
-    dist = st.session_state.history[-1][0]       # metros
-    dur = st.session_state.history[-1][1]        # segundos
-    ascent = st.session_state.history_elev[-1]   # metros
+    dist, dur, ascent, descent = st.session_state.history[-1]
 
     st.subheader("Ruta generada y métricas")
     st.write(f"• Distancia: **{dist/1000:.1f} km**")
     st.write(f"• Duración estimada: **{dur/60:.1f} min**")
+    st.write(f"• Desnivel positivo: **{ascent:.0f} m**, negativo: **{descent:.0f} m**")
     
-    # Velocidad media
+    # → Velocidad media
     dur_h = dur / 3600.0
     avg_speed = (dist/1000.0) / dur_h if dur_h > 0 else 0
     st.write(f"• Velocidad media: **{avg_speed:.1f} km/h**")
 
-    # Calorías estimadas
+    # → Calorías estimadas
     if avg_speed < 16:
         MET = 6
     elif avg_speed < 20:
@@ -280,10 +277,12 @@ if st.session_state.route_generated:
     c.setFont("Helvetica", 12)
     c.drawString(50, y0, f"• Distancia: {dist/1000:.2f} km")
     c.drawString(50, y0-20, f"• Duración: {dur/60:.1f} min")
+    c.drawString(50, y0-40, f"• Desnivel + : {ascent:.0f} m")
+    c.drawString(50, y0-60, f"• Desnivel - : {descent:.0f} m")
     c.drawString(50, y0-40, f"• Desnivel: {ascent:.0f} m")
-    c.drawString(50, y0-60, f"• Velocidad media: {avg_speed:.1f} km/h")
-    c.drawString(50, y0-80, f"• Calorías: {calories:.0f} kcal")
-    c.drawString(50, y0-100, f"• Dificultad: {dif}")
+    c.drawString(50, y0-80, f"• Velocidad media: {avg_speed:.1f} km/h")
+    c.drawString(50, y0-100, f"• Calorías: {calories:.0f} kcal")
+    c.drawString(50, y0-120, f"• Dificultad: {dif}")
     prof_png = fig.to_image(format="png")
     c.drawImage(ImageReader(io.BytesIO(prof_png)), 50, y0-380, width=500, height=250)
     c.showPage()
