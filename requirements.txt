@@ -1,4 +1,7 @@
-librosa
-soundfile
-audioread
-numba
+streamlit
+osmnx[all]
+networkx
+requests
+folium
+streamlit-folium
+numpy
