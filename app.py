@@ -22,17 +22,20 @@ code = query_params.get("code", [None])[0]
 url_client_id = query_params.get("client_id", [None])[0]
 url_client_secret = query_params.get("client_secret", [None])[0]
 
-# Guardar en session_state si existen
-if url_client_id:
-    st.session_state.CLIENT_ID = url_client_id
-if url_client_secret:
-    st.session_state.CLIENT_SECRET = url_client_secret
-
-# Inputs en caso de no estar definidos aún
+# Inicializar valores de session_state
 if "CLIENT_ID" not in st.session_state:
-    st.session_state.CLIENT_ID = st.text_input("Client ID")
+    st.session_state.CLIENT_ID = url_client_id or ""
 if "CLIENT_SECRET" not in st.session_state:
-    st.session_state.CLIENT_SECRET = st.text_input("Client Secret", type="password")
+    st.session_state.CLIENT_SECRET = url_client_secret or ""
+
+# Mostrar los campos de entrada sin sobreescribir lo ya guardado
+input_client_id = st.text_input("Client ID", value=st.session_state.CLIENT_ID)
+if input_client_id:
+    st.session_state.CLIENT_ID = input_client_id
+
+input_client_secret = st.text_input("Client Secret", type="password", value=st.session_state.CLIENT_SECRET)
+if input_client_secret:
+    st.session_state.CLIENT_SECRET = input_client_secret
 
 CLIENT_ID = st.session_state.CLIENT_ID
 CLIENT_SECRET = st.session_state.CLIENT_SECRET
