@@ -16,13 +16,13 @@ from spotipy.exceptions import SpotifyException
 # ——— CONFIG ———
 CLIENT_ID     = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-REDIRECT_URI  = "https://tu-musiquilla.streamlit.app/callback"
+REDIRECT_URI  = "https://tu-musiquilla.streamlit.app/callback"  # debe coincidir EXACTAMENTE
 SCOPE         = "user-read-recently-played"
 
 AUTH_URL = (
-    f"https://accounts.spotify.com/authorize"
+    "https://accounts.spotify.com/authorize"
     f"?client_id={CLIENT_ID}"
-    f"&response_type=code"
+    "&response_type=code"
     f"&redirect_uri={REDIRECT_URI}"
     f"&scope={SCOPE}"
 )
@@ -31,40 +31,53 @@ TOKEN_URL = "https://accounts.spotify.com/api/token"
 # ——— UI ———
 st.title("🎧 Tu Huella Emocional Sonora")
 
-# Antes: st.experimental_get_query_params()
-code = st.query_params.get("code", [None])[0]
+# Inicializamos sesión para token
+if "token_info" not in st.session_state:
+    st.session_state.token_info = None
 
-if not CLIENT_ID or not CLIENT_SECRET:
-    st.error("❌ Configura CLIENT_ID y CLIENT_SECRET en Streamlit Secrets.")
-    st.stop()
+# Obtenemos código de la URL (solo la primera vez)
+if st.session_state.token_info is None:
+    code = st.query_params.get("code", [None])[0]
 
-if not code:
-    st.markdown("### 🔐 Inicia sesión con Spotify para continuar")
-    st.markdown(f"[👉 Login con Spotify]({AUTH_URL})")
-    st.stop()
+    if not CLIENT_ID or not CLIENT_SECRET:
+        st.error("❌ Configura CLIENT_ID y CLIENT_SECRET en Streamlit Secrets.")
+        st.stop()
 
-# ——— TOKEN EXCHANGE ———
-st.info("🔁 Intercambiando código por token...")
-b64 = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
-resp = requests.post(
-    TOKEN_URL,
-    headers={"Authorization": f"Basic {b64}"},
-    data={
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": REDIRECT_URI
-    }
-)
-if resp.status_code != 200:
-    st.error("❌ Error al obtener token:")
-    st.json(resp.json())
-    st.stop()
+    if not code:
+        st.markdown("### 🔐 Inicia sesión con Spotify para continuar")
+        st.markdown(f"[👉 Login con Spotify]({AUTH_URL})")
+        st.stop()
 
-token = resp.json()["access_token"]
+    # ——— TOKEN EXCHANGE ———
+    st.info("🔁 Intercambiando código por token…")
+    b64 = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
+    resp = requests.post(
+        TOKEN_URL,
+        headers={"Authorization": f"Basic {b64}"},
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": REDIRECT_URI
+        }
+    )
+
+    if resp.status_code != 200:
+        st.error("❌ Error al obtener token:")
+        st.json(resp.json())
+        st.stop()
+
+    # Guardamos token_info y limpiamos la URL para no reusar el code
+    st.session_state.token_info = resp.json()
+    st.experimental_set_query_params()  # quita 'code' de la URL
+    st.success("✅ Autenticado. Recargando…")
+    st.experimental_rerun()
+
+# Obtenemos el access_token
+token = st.session_state.token_info["access_token"]
 sp = spotipy.Spotify(auth=token)
-st.success("✅ Autenticado. Cargando historial…")
 
 # ——— DATA & ANÁLISIS ———
+st.info("⏳ Cargando historial…")
 try:
     items = sp.current_user_recently_played(limit=50)["items"]
 except SpotifyException as e:
