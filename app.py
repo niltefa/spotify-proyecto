@@ -193,6 +193,14 @@ if st.session_state.route_generated:
     fig = px.line(df_prof, x="distance_m", y="elevation_m", labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"}, title="Perfil de Elevación")
     st.plotly_chart(fig, use_container_width=True)
 
+
+
+    st.subheader("🗺️ Mapa de ruta")
+    m2 = folium.Map(location=[lat, lon], zoom_start=13)
+    folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
+    st_folium(m2, width=700, height=300, returned_objects=[])
+
+
     # Generar PNG de mapa estático con StaticMap
     m_static = StaticMap(700, 300)
     m_static.add_line(Line([(lon, lat) for lat, lon in st.session_state.route], 'blue', 4))
