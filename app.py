@@ -1,4 +1,5 @@
 import os
+import io
 import streamlit as st
 import requests
 import numpy as np
@@ -9,7 +10,6 @@ from streamlit_folium import st_folium
 from geopy import distance as geopy_distance
 import openrouteservice
 from folium.plugins import LocateControl
-import io
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.utils import ImageReader
@@ -99,17 +99,13 @@ def predict_difficulty(distance_m, ascent_m, weather):
 
 
 def generate_google_maps_url(coords):
-    """Genera una URL de Google Maps con hasta 25 puntos, muestrea uniformemente."""
     N = len(coords)
     max_pts = 25
-    # Si hay pocos puntos, usar todos, sino muestrear uniformemente
     if N <= max_pts:
         pts = coords
     else:
-        # índices equidistantes desde 0 hasta N-1
         indices = np.linspace(0, N-1, max_pts, dtype=int)
         pts = [coords[i] for i in indices]
-    # Construir parte de path lat,lon separados por '/'
     path = "/".join(f"{lat},{lon}" for lat, lon in pts)
     return f"https://www.google.com/maps/dir/{path}"
 
@@ -177,17 +173,19 @@ if st.session_state.route_generated:
     # URL Google Maps
     url = generate_google_maps_url(st.session_state.route)
     st.markdown(f"[Ver ruta en Google Maps]({url})", unsafe_allow_html=True)
-    # Predicciones
+
+    # Predicciones personalizadas
     if len(st.session_state.history) > 1:
         arr = np.array(st.session_state.history)
         coeffs_time = np.polyfit(arr[:,0], arr[:,1], 1)
         pred_time = coeffs_time[0] * distance + coeffs_time[1]
-        st.write(f"• Predicción personalizada tiempo: {pred_time/60:.1f} min")
+        st.write(f"• Predicción tiempo personalizada: {pred_time/60:.1f} min")
     if len(st.session_state.history_elev) > 1:
         dists = [h[0] for h in st.session_state.history]
         coeffs_elev = np.polyfit(dists, st.session_state.history_elev, 1)
         pred_elev = coeffs_elev[0] * distance + coeffs_elev[1]
-        st.write(f"• Predicción personalizada desnivel: {pred_elev:.0f} m")
+        st.write(f"• Predicción desnivel personalizada: {pred_elev:.0f} m")
+
     # Perfil de elevación gráfico
     coords3d = st.session_state.route3d
     dist_acc = [0.0]
@@ -196,53 +194,67 @@ if st.session_state.route_generated:
         seg = geopy_distance.distance((p0[0], p0[1]), (p1[0], p1[1])).km * 1000
         dist_acc.append(dist_acc[-1] + seg)
     df_prof = pd.DataFrame({"distance_m": dist_acc, "elevation_m": [pt[2] for pt in coords3d]})
-    fig = px.line(df_prof, x="distance_m", y="elevation_m", labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"}, title="Perfil de Elevación")
+    fig = px.line(df_prof, x="distance_m", y="elevation_m",
+                  labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"},
+                  title="Perfil de Elevación")
     st.plotly_chart(fig, use_container_width=True)
 
-    # Mapa de ruta y captura de imagen PNG
+    # Mapa interactivo
     st.subheader("🗺️ Mapa de ruta")
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
-    map_out = st_folium(m2, width=700, height=300, returned_objects=["png"])
-    map_png = map_out.get("png")  # bytes de la imagen PNG
-    
-    # -------------------- Generación del PDF --------------------
+    st_folium(m2, width=700, height=300)
+
+    # -------------------- PDF --------------------
+    # Static map usando OpenRouteService
+    coords = [(lon, lat) for lat, lon in st.session_state.route]
+    geojson = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature",
+             "geometry": {"type": "LineString", "coordinates": coords}}
+        ]
+    }
+    try:
+        static_img = ors_client.request(
+            "staticmap",
+            params={"geojson": geojson, "size": [700, 300]}
+        )
+        map_png = static_img
+    except Exception:
+        map_png = None
+
     if map_png:
-        # Buffer en memoria
         pdf_buffer = io.BytesIO()
         c = canvas.Canvas(pdf_buffer, pagesize=letter)
-        width, height = letter  # 612x792 pts
-        
+        w_pt, h_pt = letter
+
         # Título
         c.setFont("Helvetica-Bold", 18)
-        c.drawCentredString(width/2, height - 50, "🛣 Detalle de la Ruta de Ciclismo")
-        
-        # Insertar imagen del mapa
+        c.drawCentredString(w_pt/2, h_pt - 50, "🛣 Detalle de la Ruta de Ciclismo")
+
+        # Mapa estático
         img = ImageReader(io.BytesIO(map_png))
-        img_w, img_h = 500, 300
-        c.drawImage(img, 50, height - 100 - img_h, width=img_w, height=img_h)
-        
-        # Texto con los datos
-        y = height - 120 - img_h
+        c.drawImage(img, 50, h_pt - 100 - 300, width=500, height=300)
+
+        # Datos
+        y0 = h_pt - 420
         c.setFont("Helvetica", 12)
-        c.drawString(50, y, f"• Distancia: {dist/1000:.2f} km")
-        c.drawString(50, y - 20, f"• Duración: {dur/60:.1f} min")
-        c.drawString(50, y - 40, f"• Desnivel total (ascenso): {ascent:.0f} m")
-        c.drawString(50, y - 60, f"• Dificultad: {dif}")
-        
-        # Añadir el gráfico de perfil de elevación como imagen
-        # Primero lo convertimos a PNG
+        c.drawString(50, y0,      f"• Distancia: {dist/1000:.2f} km")
+        c.drawString(50, y0-20,   f"• Duración: {dur/60:.1f} min")
+        c.drawString(50, y0-40,   f"• Desnivel: {ascent:.0f} m")
+        c.drawString(50, y0-60,   f"• Dificultad: {dif}")
+
+        # Perfil de elevación en PNG
         prof_png = fig.to_image(format="png")
         prof_img = ImageReader(io.BytesIO(prof_png))
-        c.drawImage(prof_img, 50, y - 380, width=500, height=250)
-        
-        # Finalizar PDF
+        c.drawImage(prof_img, 50, y0 - 360, width=500, height=250)
+
         c.showPage()
         c.save()
         pdf_buffer.seek(0)
         pdf_bytes = pdf_buffer.read()
-        
-        # Botón de descarga
+
         st.download_button(
             label="📄 Descargar PDF con la ruta",
             data=pdf_bytes,
@@ -250,4 +262,4 @@ if st.session_state.route_generated:
             mime="application/pdf"
         )
     else:
-        st.error("No se pudo capturar la imagen del mapa para generar el PDF.")
+        st.error("No se pudo obtener la imagen de la ruta para generar el PDF.")
