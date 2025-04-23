@@ -4,7 +4,6 @@ import requests
 import numpy as np
 import pandas as pd
 import folium
-from folium.plugins import LocateControl
 import plotly.express as px
 from streamlit_folium import st_folium
 from geopy import distance as geopy_distance
@@ -21,7 +20,7 @@ ors_client = openrouteservice.Client(key=ORS_API_KEY)
 # Inicializar session_state
 for key in ['origin', 'route', 'route3d', 'history', 'history_elev', 'route_generated', 'weather']:
     if key not in st.session_state:
-        if key == 'history' or key == 'history_elev':
+        if key in ['history', 'history_elev']:
             st.session_state[key] = []
         elif key == 'route_generated':
             st.session_state[key] = False
@@ -93,19 +92,30 @@ def predict_difficulty(distance_m, ascent_m, weather):
     else:
         return "Extremo"
 
+
+def generate_google_maps_url(coords):
+    """
+    Genera una URL de Google Maps con la ruta completa.
+    coords: lista de tuplas (lat, lon)
+    """
+    # Limitar a 25 waypoints por URL (Google limita)
+    pts = coords[:25]
+    path = "/".join(f"{lat},{lon}" for lat, lon in pts)
+    return f"https://www.google.com/maps/dir/{path}"
+
 # ——— UI ———
 st.set_page_config(page_title="🚴 Ruta de Ciclismo Avanzada", layout="wide")
-st.title("🚴 Recomienda tu Ruta de Ciclismo con Perfil de Elevación y Desnivel")
+st.title("🚴 Recomienda tu Ruta de Ciclismo con Perfil de Elevación, Desnivel y Google Maps")
 
 # 1. Selección de origen
 st.subheader("1. Selecciona el punto de inicio (click en el mapa)")
 center = (40.4168, -3.7038)
 m = folium.Map(location=center, zoom_start=12)
+from folium.plugins import LocateControl
 LocateControl(auto_start=True).add_to(m)
 m.add_child(folium.LatLngPopup())
-# Ajuste dinámico de altura: más pequeño antes de seleccionar punto
-dynamic_height = 500 if st.session_state.origin is None else 600
-map_data = st_folium(m, width=1000, height=dynamic_height)
+dynamic_height = 500 if st.session_state.origin is None else 800
+map_data = st_folium(m, width=700, height=dynamic_height)
 if map_data and map_data.get("last_clicked"):
     st.session_state.origin = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
 elif not st.session_state.origin:
@@ -155,6 +165,9 @@ if st.session_state.route_generated:
     st.write(f"• Desnivel total (ascenso): {ascent:.0f} m")
     dif = predict_difficulty(dist, ascent, st.session_state.weather)
     st.write(f"• Dificultad estimada: **{dif}**")
+    # URL Google Maps
+    url = generate_google_maps_url(st.session_state.route)
+    st.markdown(f"[Ver ruta en Google Maps]({url})", unsafe_allow_html=True)
     # Predicciones
     if len(st.session_state.history) > 1:
         arr = np.array(st.session_state.history)
@@ -176,8 +189,8 @@ if st.session_state.route_generated:
     df_prof = pd.DataFrame({"distance_m": dist_acc, "elevation_m": [pt[2] for pt in coords3d]})
     fig = px.line(df_prof, x="distance_m", y="elevation_m", labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"}, title="Perfil de Elevación")
     st.plotly_chart(fig, use_container_width=True)
-    # Mapa
+    # Mapa de ruta
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
+    st_folium(m2, width=700, height=300, returned_objects=[])
     st.subheader("🗺️ Mapa de ruta")
-    st_folium(m2, width=700, height=300, returned_objects=[])  # Ajuste altura  # Desactivamos eventos para no reiniciar al mover el mapa
