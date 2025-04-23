@@ -7,3 +7,4 @@ streamlit-leaflet
 folium
 streamlit_folium
 geopy
+openrouteservice
