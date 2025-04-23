@@ -200,7 +200,7 @@ if st.button("4. Generar ruta"):
 
 # 5. Mostrar resultados y métricas
 if st.session_state.route_generated:
-    dist, dur, ascent, descent = st.session_state.history[-1]
+    dist, dur, ascent = st.session_state.history[-1]
 
     st.subheader("Ruta generada y métricas")
     st.write(f"• Distancia: **{dist/1000:.1f} km**")
