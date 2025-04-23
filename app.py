@@ -1,4 +1,4 @@
-# Tu Huella Emocional Sonora - Versión OAuth adaptada a Streamlit Cloud (sin input manual)
+# Tu Huella Emocional Sonora - Versión OAuth adaptada a Streamlit Cloud con estado de sesión
 
 import pandas as pd
 import numpy as np
@@ -16,20 +16,24 @@ import base64
 # ---------- STREAMLIT UI ----------
 st.title("🎧 Tu Huella Emocional Sonora")
 
-# Obtener CLIENT_ID y SECRET desde input si no están como variables de entorno
-CLIENT_ID = os.getenv("CLIENT_ID")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+# Obtener o guardar credenciales en session_state
+if "CLIENT_ID" not in st.session_state:
+    st.session_state.CLIENT_ID = os.getenv("CLIENT_ID")
+if "CLIENT_SECRET" not in st.session_state:
+    st.session_state.CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
-if CLIENT_ID is None or CLIENT_SECRET is None:
+if not st.session_state.CLIENT_ID or not st.session_state.CLIENT_SECRET:
     st.warning("🔐 Por favor, introduce tus credenciales de Spotify")
-    CLIENT_ID = st.text_input("Client ID")
-    CLIENT_SECRET = st.text_input("Client Secret", type="password")
+    st.session_state.CLIENT_ID = st.text_input("Client ID", value=st.session_state.CLIENT_ID or "")
+    st.session_state.CLIENT_SECRET = st.text_input("Client Secret", value=st.session_state.CLIENT_SECRET or "", type="password")
+
+CLIENT_ID = st.session_state.CLIENT_ID
+CLIENT_SECRET = st.session_state.CLIENT_SECRET
 
 REDIRECT_URI = "https://tu-musiquilla.streamlit.app/"
 SCOPE = "user-read-recently-played"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 
-# Generar AUTH_URL solo si ya se tiene client_id
 AUTH_URL = f"https://accounts.spotify.com/authorize?client_id={CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&scope={SCOPE}" if CLIENT_ID else ""
 
 query_params = st.query_params
