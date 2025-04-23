@@ -221,7 +221,8 @@ if st.session_state.route_generated:
             params={"geojson": geojson, "size": [700, 300]}
         )
         map_png = static_img
-    except Exception:
+    except Exception as e:
+        print("ERROR: ", e)
         map_png = None
 
     if map_png:
