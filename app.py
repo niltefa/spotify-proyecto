@@ -94,12 +94,17 @@ def predict_difficulty(distance_m, ascent_m, weather):
 
 
 def generate_google_maps_url(coords):
-    """
-    Genera una URL de Google Maps con la ruta completa.
-    coords: lista de tuplas (lat, lon)
-    """
-    # Limitar a 25 waypoints por URL (Google limita)
-    pts = coords[:25]
+    """Genera una URL de Google Maps con hasta 25 puntos, muestrea uniformemente."""
+    N = len(coords)
+    max_pts = 25
+    # Si hay pocos puntos, usar todos, sino muestrear uniformemente
+    if N <= max_pts:
+        pts = coords
+    else:
+        # índices equidistantes desde 0 hasta N-1
+        indices = np.linspace(0, N-1, max_pts, dtype=int)
+        pts = [coords[i] for i in indices]
+    # Construir parte de path lat,lon separados por '/'
     path = "/".join(f"{lat},{lon}" for lat, lon in pts)
     return f"https://www.google.com/maps/dir/{path}"
 
@@ -114,7 +119,7 @@ m = folium.Map(location=center, zoom_start=12)
 from folium.plugins import LocateControl
 LocateControl(auto_start=True).add_to(m)
 m.add_child(folium.LatLngPopup())
-dynamic_height = 500 if st.session_state.origin is None else 800
+dynamic_height = 200 if st.session_state.origin is None else 300
 map_data = st_folium(m, width=700, height=dynamic_height)
 if map_data and map_data.get("last_clicked"):
     st.session_state.origin = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
@@ -125,7 +130,7 @@ lat, lon = st.session_state.origin
 st.write(f"📍 Origen: ({lat:.6f}, {lon:.6f})")
 
 # 2. Selección de distancia
-d_km = st.slider("2. Distancia deseada (km)", 5, 250, 20)
+d_km = st.slider("2. Distancia deseada (km)", 5, 50, 20)
 distance = d_km * 1000
 
 # 3. Clima y pronóstico
