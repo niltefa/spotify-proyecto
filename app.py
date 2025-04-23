@@ -8,6 +8,7 @@ import plotly.express as px
 from streamlit_folium import st_folium
 from geopy import distance as geopy_distance
 import openrouteservice
+from folium.plugins import LocateControl
 
 # Configuración APIs
 t = st.secrets
@@ -116,7 +117,6 @@ st.title("🚴 Recomienda tu Ruta de Ciclismo con Perfil de Elevación, Desnivel
 st.subheader("1. Selecciona el punto de inicio (click en el mapa)")
 center = (40.4168, -3.7038)
 m = folium.Map(location=center, zoom_start=12)
-from folium.plugins import LocateControl
 LocateControl(auto_start=True).add_to(m)
 m.add_child(folium.LatLngPopup())
 dynamic_height = 200 if st.session_state.origin is None else 300
@@ -195,7 +195,7 @@ if st.session_state.route_generated:
     fig = px.line(df_prof, x="distance_m", y="elevation_m", labels={"distance_m": "Distancia (m)", "elevation_m": "Elevación (m)"}, title="Perfil de Elevación")
     st.plotly_chart(fig, use_container_width=True)
     # Mapa de ruta
+    st.subheader("🗺️ Mapa de ruta")
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
     st_folium(m2, width=700, height=300, returned_objects=[])
-    st.subheader("🗺️ Mapa de ruta")
