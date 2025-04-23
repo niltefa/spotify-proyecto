@@ -103,7 +103,7 @@ center = (40.4168, -3.7038)
 m = folium.Map(location=center, zoom_start=12)
 LocateControl(auto_start=True).add_to(m)
 m.add_child(folium.LatLngPopup())
-map_data = st_folium(m, width=700, height=400)
+map_data = st_folium(m, width=700, height=300)  # Ajuste altura para evitar espacio grande
 if map_data and map_data.get("last_clicked"):
     st.session_state.origin = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
 elif not st.session_state.origin:
@@ -178,4 +178,4 @@ if st.session_state.route_generated:
     m2 = folium.Map(location=[lat, lon], zoom_start=13)
     folium.PolyLine(st.session_state.route, color='blue', weight=4).add_to(m2)
     st.subheader("🗺️ Mapa de ruta")
-    st_folium(m2, width=700, height=400, returned_objects=[])
+    st_folium(m2, width=700, height=300, returned_objects=[])
