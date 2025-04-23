@@ -53,7 +53,7 @@ def compute_circular_route(origin, distance_m):
     half_km = distance_m / 2000.0
     dest = geopy_distance.distance(kilometers=half_km).destination((lat0, lon0), bearing)
     lat1, lon1 = dest.latitude, dest.longitude
-    coords = [(lon0, lat0), (lat1, lon1)]
+    coords = [(lon0, lat0), (lon1, lat1)]
     route = ors_client.directions(
         coords,
         profile='cycling-regular',
