@@ -6,3 +6,7 @@ numpy
 scikit-learn
 plotly
 openai
+librosa
+soundfile
+audioread
+numba
